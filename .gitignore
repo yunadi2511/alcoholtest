@@ -2,6 +2,9 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
-*.db
 instance/
+*.db
 .env
+*.zip
+static/uploads/*
+!static/uploads/.gitkeep
