@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Swap Employee{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Swap Employee</div>
+    <div class="page-sub">{{ today.strftime('%A, %d %B %Y') }}</div>
+  </div>
+  <a href="{{ url_for('testing') }}" class="btn btn-ghost btn-sm">← Back</a>
+</div>
+
+<!-- ORIGINAL EMPLOYEE INFO -->
+<div class="card" style="border-color:var(--fail)">
+  <div class="card-title">Employee Being Swapped Out</div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <div style="width:52px;height:52px;background:var(--fail-dim);border:2px solid var(--fail);
+                border-radius:50%;display:flex;align-items:center;justify-content:center;
+                font-size:22px;flex-shrink:0">👤</div>
+    <div>
+      <div style="font-weight:700;font-size:18px">{{ selection.employee.name }}</div>
+      <div style="font-size:13px;color:var(--text-muted);font-family:var(--mono)">
+        {{ selection.employee.employee_id }} · {{ selection.employee.discipline }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SWAP FORM -->
+<form method="POST">
+
+  <!-- REPLACEMENT SELECTION -->
+  <div class="card">
+    <div class="card-title">Select Replacement</div>
+    {% if available %}
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px">
+      Showing available employees from
+      <strong>{{ selection.employee.discipline }}</strong>
+      working today and not yet in today's selection.
+    </p>
+    {% for emp in available %}
+    <label style="display:flex;align-items:center;gap:12px;padding:12px 14px;
+                  border:1px solid var(--border);border-radius:var(--radius);
+                  margin-bottom:8px;cursor:pointer;transition:all .15s"
+           class="replacement-option">
+      <input type="radio" name="replacement_id" value="{{ emp.id }}" required
+             style="width:18px;height:18px;accent-color:var(--accent);flex-shrink:0">
+      <div>
+        <div style="font-weight:600;font-size:15px">{{ emp.name }}</div>
+        <div style="font-size:12px;color:var(--text-muted);font-family:var(--mono)">
+          {{ emp.employee_id }} · {{ emp.discipline }}
+          {% set last = emp.last_tested_date() %}
+          {% if last %}
+          · Last tested: {{ last.strftime('%d %b') }}
+          {% else %}
+          · Never tested
+          {% endif %}
+        </div>
+      </div>
+    </label>
+    {% endfor %}
+    {% else %}
+    <div style="text-align:center;padding:24px;color:var(--text-muted)">
+      <div style="font-size:28px;margin-bottom:8px">😔</div>
+      <div style="font-weight:600">No replacements available</div>
+      <div style="font-size:13px;margin-top:4px">
+        No other employees from {{ selection.employee.discipline }}
+        are working today and not already in the selection.
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- REMARK -->
+  <div class="card">
+    <div class="card-title">Reason for Swap</div>
+    <textarea name="remark" rows="3" required
+      placeholder="e.g. Sick leave, Emergency, Replaced by request..."></textarea>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+      ⚠️ This reason will be recorded in the audit log.
+    </div>
+  </div>
+
+  <!-- SUBMIT -->
+  {% if available %}
+  <div style="display:flex;gap:10px;margin-bottom:20px">
+    <button type="submit" class="btn btn-primary" style="flex:1"
+      onclick="return confirm('Confirm swap? This action will be logged.')">
+      🔄 Confirm Swap
+    </button>
+    <a href="{{ url_for('testing') }}" class="btn btn-ghost">Cancel</a>
+  </div>
+  {% else %}
+  <div style="margin-bottom:20px">
+    <a href="{{ url_for('testing') }}" class="btn btn-ghost">← Back to Testing</a>
+  </div>
+  {% endif %}
+
+</form>
+
+<style>
+.replacement-option:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+.replacement-option input:checked ~ div {
+  color: var(--accent);
+}
+</style>
+{% endblock %}

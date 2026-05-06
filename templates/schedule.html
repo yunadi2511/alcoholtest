@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Weekly Schedule{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Weekly Schedule</div>
+    <div class="page-sub">Week of {{ week_start.strftime('%d %b %Y') }}</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="{{ url_for('download_template') }}" class="btn btn-teal">📥 Download Template</a>
+
+{% if not selection_exists and current_user.role in ['admin','spv'] %}
+<form method="POST" action="{{ url_for('upload_schedule_excel') }}"
+      enctype="multipart/form-data" style="display:inline">
+  <label class="btn btn-upload" style="cursor:pointer;text-transform:none">
+    📤 Upload Schedule
+    <input type="file" name="excel_file" accept=".xlsx,.csv"
+            style="display:none" onchange="this.form.submit()">
+  </label>
+</form>
+{% endif %}
+    {% if not selection_exists and current_user.role in ['admin','spv'] %}
+    <form method="POST" action="{{ url_for('generate_selection') }}">
+      <button type="submit" class="btn btn-primary"
+        onclick="return confirm('Generate random selection for all 7 days this week?')">
+        🎲 Generate Week Selection
+      </button>
+    </form>
+    {% endif %}
+    {% if current_user.role == 'admin' %}
+    <form method="POST" action="{{ url_for('reset_week_schedule') }}"
+          onsubmit="return confirm('⚠️ WARNING: This will delete ALL selections and schedule for this week. This cannot be undone. Are you sure?')">
+      <button type="submit" class="btn" style="background:#dc3545;color:#fff;border:none">
+        🔄 Reset Week
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if selection_exists %}
+<div class="flash success">
+  ✅ This week's selection has been generated. Schedule is now locked.
+  Go to <a href="{{ url_for('testing') }}" style="color:inherit;font-weight:600">Testing</a> to record results.
+</div>
+{% endif %}
+
+<!-- SCHEDULE FORM -->
+{% if not selection_exists and current_user.role in ['admin','spv'] %}
+<form method="POST" action="{{ url_for('upload_schedule') }}">
+{% endif %}
+
+<div class="card">
+  <div class="card-title">Who Works This Week</div>
+
+  <!-- DAY HEADERS -->
+  <div class="table-wrap">
+    <table id="schedTable">
+      <thead>
+        <tr>
+          <th>Employee</th>
+          <th>Discipline</th>
+          {% for i in range(7) %}
+          <th style="text-align:center">
+            <div>{{ day_labels[i] }}</div>
+            <div style="font-size:11px;color:var(--text-muted);font-weight:400">
+              {{ day_dates[i].strftime('%d %b') }}
+            </div>
+          </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for discipline, emps in by_discipline.items() %}
+        <!-- DISCIPLINE HEADER ROW -->
+        <tr>
+          <td colspan="9" style="background:var(--surface2);padding:8px 12px">
+            <span style="font-size:12px;font-weight:700;text-transform:uppercase;
+                         letter-spacing:.08em;color:var(--accent)">
+              📁 {{ discipline }}
+            </span>
+          </td>
+        </tr>
+        {% for emp in emps %}
+        <tr>
+          <td style="font-weight:600">{{ emp.name }}</td>
+          <td style="font-size:13px;color:var(--text-muted)">{{ emp.employee_id }}</td>
+          {% for day in days %}
+          <td style="text-align:center">
+            {% set sched = schedule_dict.get(emp.id) %}
+            {% set is_checked = sched and (sched|attr(day)) if sched else false %}
+            {% if selection_exists %}
+              {% if is_checked %}
+                <span style="color:var(--pass);font-size:16px">✓</span>
+              {% else %}
+                <span style="color:var(--border);font-size:16px">—</span>
+              {% endif %}
+            {% else %}
+              <input type="checkbox" name="{{ emp.id }}_{{ day }}"
+                {% if is_checked %}checked{% endif %}
+                style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer">
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if not selection_exists and current_user.role in ['admin','spv'] %}
+<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+  <button type="submit" class="btn btn-success">💾 Save Schedule</button>
+</div>
+</form>
+{% endif %}
+
+<!-- THIS WEEK'S SELECTION SUMMARY -->
+{% if selection_exists %}
+<div class="card">
+  <div class="card-title">This Week's Testing Schedule</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Day</th>
+          <th>Date</th>
+          <th>Selected Employees</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in range(7) %}
+        {% set day_date = day_dates[i] %}
+        {% set day_selections = [] %}
+        {% for sel in selections_today %}{% endfor %}
+        <tr {% if day_date == today %}style="background:var(--accent-dim)"{% endif %}>
+          <td style="font-weight:600">
+            {{ day_labels[i] }}
+            {% if day_date == today %}
+              <span class="badge-pending" style="font-size:10px;margin-left:4px">TODAY</span>
+            {% endif %}
+          </td>
+          <td style="font-family:var(--mono);font-size:13px">
+            {{ day_date.strftime('%d %b %Y') }}
+          </td>
+          <td style="font-size:13px;color:var(--text-muted)">15 selected</td>
+          <td>
+            {% if day_date < today %}
+              <span class="badge-pass">Done</span>
+            {% elif day_date == today %}
+              <span class="badge-pending">In Progress</span>
+            {% else %}
+              <span style="color:var(--text-muted);font-size:13px">Upcoming</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+{% block scripts %}
+<script>
+// Select All / Clear All per row helper
+function toggleRow(empId, val) {
+  ['mon','tue','wed','thu','fri','sat','sun'].forEach(d => {
+    const cb = document.querySelector(`input[name="${empId}_${d}"]`);
+    if(cb) cb.checked = val;
+  });
+}
+// Select All / Clear All per column
+function toggleDay(day, val) {
+  document.querySelectorAll(`input[name$="_${day}"]`).forEach(cb => cb.checked = val);
+}
+</script>
+{% endblock %}

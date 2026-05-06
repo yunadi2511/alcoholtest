@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>AlcoCheck — Login</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#0d1117;--surface:#161b22;--surface2:#1c2128;
+      --border:#30363d;--text:#e6edf3;--text-muted:#7d8590;
+      --accent:#f0b429;--fail:#da3633;--pass:#2ea043;
+      --radius:8px;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{
+      font-family:'IBM Plex Sans',sans-serif;
+      background:var(--bg);color:var(--text);
+      min-height:100vh;display:flex;
+      align-items:center;justify-content:center;
+      padding:20px;
+    }
+    .login-wrap{width:100%;max-width:380px}
+    .brand{
+      text-align:center;margin-bottom:32px;
+    }
+    .brand-icon{
+      width:60px;height:60px;
+      background:var(--accent);
+      border-radius:16px;
+      display:inline-flex;align-items:center;justify-content:center;
+      font-size:28px;margin-bottom:12px;
+    }
+    .brand-name{
+      font-family:'IBM Plex Mono',monospace;
+      font-size:24px;font-weight:700;
+      color:var(--accent);letter-spacing:.05em;
+    }
+    .brand-sub{
+      font-size:13px;color:var(--text-muted);
+      margin-top:4px;
+    }
+    .card{
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:28px;
+    }
+    .form-group{margin-bottom:16px}
+    label{
+      display:block;font-size:12px;font-weight:600;
+      color:var(--text-muted);margin-bottom:6px;
+      text-transform:uppercase;letter-spacing:.06em;
+    }
+    input{
+      width:100%;background:var(--surface2);
+      border:1px solid var(--border);color:var(--text);
+      padding:12px 14px;border-radius:var(--radius);
+      font-size:15px;font-family:'IBM Plex Sans',sans-serif;
+      transition:border-color .15s;
+    }
+    input:focus{outline:none;border-color:var(--accent)}
+    .btn{
+      width:100%;background:var(--accent);color:#000;
+      border:none;padding:13px;border-radius:var(--radius);
+      font-size:15px;font-weight:700;cursor:pointer;
+      letter-spacing:.03em;transition:background .15s;
+      font-family:'IBM Plex Sans',sans-serif;
+    }
+    .btn:hover{background:#f5c842}
+    .flash{
+      padding:12px 14px;border-radius:var(--radius);
+      margin-bottom:16px;font-size:14px;
+      background:#da363322;border:1px solid var(--fail);
+      color:#f85149;border-left:3px solid var(--fail);
+    }
+    .footer-note{
+      text-align:center;margin-top:20px;
+      font-size:12px;color:var(--text-muted);
+      font-family:'IBM Plex Mono',monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="brand">
+      <div class="brand-icon">🧪</div>
+      <div class="brand-name">ALCOCHECK</div>
+      <div class="brand-sub">Alcohol Testing Management System</div>
+    </div>
+    <div class="card">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for cat, msg in messages %}
+            <div class="flash">⚠️ {{ msg }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      <form method="POST" action="{{ url_for('login') }}">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" name="username" placeholder="Enter username" autocomplete="username" required autofocus>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" name="password" placeholder="Enter password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="btn">Sign In</button>
+      </form>
+    </div>
+    <div class="footer-note">Restricted Access</div>
+  </div>
+</body>
+</html>

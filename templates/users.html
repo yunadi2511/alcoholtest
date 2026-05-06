@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}User Management{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">User Management</div>
+    <div class="page-sub">{{ users|length }} system users</div>
+  </div>
+  <button class="btn btn-primary" onclick="toggleAddForm()">+ Add User</button>
+</div>
+
+<!-- ADD FORM -->
+<div class="card" id="addForm" style="display:none;border-color:var(--accent)">
+  <div class="card-title">Add New User</div>
+  <form method="POST" action="{{ url_for('add_user') }}">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group" style="margin:0">
+        <label>Full Name</label>
+        <input type="text" name="full_name" placeholder="Display name" required>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Username</label>
+        <input type="text" name="username" placeholder="Login username" required>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="Set password" required>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Role</label>
+        <select name="role" required>
+          <option value="">Select role...</option>
+          <option value="admin">Admin</option>
+          <option value="spv">Supervisor (SPV)</option>
+          <option value="viewer">Viewer</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button type="submit" class="btn btn-success">Create User</button>
+      <button type="button" class="btn btn-ghost" onclick="toggleAddForm()">Cancel</button>
+    </div>
+  </form>
+</div>
+
+<!-- ROLE LEGEND -->
+<div class="card">
+  <div class="card-title">Role Permissions</div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;font-size:13px">
+    <div style="padding:12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)">
+      <div style="font-weight:700;color:var(--accent);margin-bottom:6px">ADMIN</div>
+      <div style="color:var(--text-muted)">Full access: manage users, employees, view all data, record tests</div>
+    </div>
+    <div style="padding:12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)">
+      <div style="font-weight:700;color:var(--pass);margin-bottom:6px">SUPERVISOR</div>
+      <div style="color:var(--text-muted)">View schedule, generate selection, record test results</div>
+    </div>
+    <div style="padding:12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)">
+      <div style="font-weight:700;color:var(--text-muted);margin-bottom:6px">VIEWER</div>
+      <div style="color:var(--text-muted)">View dashboard and history only, read-only access</div>
+    </div>
+  </div>
+</div>
+
+<!-- USER LIST -->
+<div class="card">
+  <div class="card-title">System Users</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Username</th>
+          <th>Role</th>
+          <th>Created</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td style="font-weight:600">{{ u.full_name or '—' }}</td>
+          <td style="font-family:var(--mono);font-size:13px">{{ u.username }}</td>
+          <td>
+            <span style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+              {% if u.role=='admin' %}color:var(--accent){% elif u.role=='spv' %}color:var(--pass){% else %}color:var(--text-muted){% endif %}">
+              {{ u.role }}
+            </span>
+          </td>
+          <td style="font-size:13px;color:var(--text-muted)">{{ u.created_at.strftime('%d %b %Y') }}</td>
+          <td style="display:flex;gap:6px;align-items:center">
+            {% if u.id != current_user.id %}
+            <button class="btn btn-blue btn-sm" onclick="openEdit({{ u.id }}, '{{ u.full_name }}', '{{ u.username }}', '{{ u.role }}')">
+              Edit
+            </button>
+            <form method="POST" action="{{ url_for('delete_user', user_id=u.id) }}" style="display:inline">
+              <button type="submit" class="btn btn-danger btn-sm"
+                onclick="return confirm('Delete user {{ u.username }}? This cannot be undone.')">
+                Delete
+              </button>
+            </form>
+          </td>
+          {% else %}
+          <span style="color:var(--text-muted);font-size:13px">You</span>
+          {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- EDIT MODAL -->
+<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:380px;max-width:90vw">
+    <div class="card-title">Edit User</div>
+    <form method="POST" id="editForm">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" name="full_name" id="edit_full_name" required>
+      </div>
+      <div class="form-group">
+        <label>Username (cannot change)</label>
+        <input type="text" id="edit_username" disabled style="opacity:0.5">
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select name="role" id="edit_role" required>
+          <option value="admin">Admin</option>
+          <option value="spv">Supervisor (SPV)</option>
+          <option value="viewer">Viewer</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>New Password (leave blank to keep current)</label>
+        <input type="password" name="password" placeholder="Leave blank = no change">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <button type="button" class="btn btn-ghost" onclick="closeEdit()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- DANGER ZONE -->
+{% if current_user.role == 'admin' %}
+<div class="card" style="border-color:var(--fail)">
+  <div class="card-title" style="color:var(--fail)">Danger Zone</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div>
+      <div style="font-weight:600;margin-bottom:4px">Run Data Cleanup</div>
+      <div style="font-size:13px;color:var(--text-muted)">
+        Permanently deletes test results and photos older than 60 days. Auto-runs daily at 1AM.
+      </div>
+    </div>
+    <form method="POST" action="{{ url_for('run_cleanup') }}">
+      <button type="submit" class="btn btn-danger"
+        onclick="return confirm('Delete all data older than 60 days? This cannot be undone.')">
+        🗑 Run Data Cleanup
+      </button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+
+{% endblock %}
+{% block scripts %}
+<script>
+function toggleAddForm(){
+  const f = document.getElementById('addForm');
+  f.style.display = f.style.display==='none' ? 'block' : 'none';
+}
+function openEdit(id, fullName, username, role) {
+  document.getElementById('editForm').action = '/users/edit/' + id;
+  document.getElementById('edit_full_name').value = fullName;
+  document.getElementById('edit_username').value = username;
+  document.getElementById('edit_role').value = role;
+  const m = document.getElementById('editModal');
+  m.style.display = 'flex';
+}
+function closeEdit() {
+  document.getElementById('editModal').style.display = 'none';
+}
+</script>
+{% endblock %}

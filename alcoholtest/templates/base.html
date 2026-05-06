@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>{% block title %}AlcoCheck{% endblock %} — JKT2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --orange:        #FF7A00;
+      --orange-dim:    #FF7A0018;
+      --orange-hover:  #FF9130;
+      --navy:          #010028;
+      --navy-surface:  #06003E;
+      --navy-card:     #0A0050;
+      --prog-blue:     #042AA6;
+      --smart-blue:    #3A7EFF;
+      --white:         #FFFFFF;
+      --bg:            var(--navy);
+      --surface:       var(--navy-surface);
+      --surface2:      var(--navy-card);
+      --border:        rgba(58, 126, 255, 0.20);
+      --border-strong: rgba(58, 126, 255, 0.40);
+      --text:          #F0F4FF;
+      --text-muted:    rgba(240, 244, 255, 0.52);
+      --accent:        var(--orange);
+      --accent-dim:    var(--orange-dim);
+      --pass:          #00C853;
+      --pass-dim:      #00C85318;
+      --fail:          #FF3D3D;
+      --fail-dim:      #FF3D3D18;
+      --radius:        6px;
+      --font:          'Noto Sans', sans-serif;
+      --mono:          'Noto Sans', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 15px;
+      line-height: 1.55;
+      background-image: repeating-linear-gradient(
+        120deg, transparent, transparent 60px,
+        rgba(58,126,255,0.025) 60px, rgba(58,126,255,0.025) 61px
+      );
+    }
+
+    /* ── NAV ── */
+    .nav {
+      background: var(--navy);
+      border-bottom: 2px solid var(--orange);
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 58px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 4px 24px rgba(255,122,0,0.12);
+    }
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 17px;
+      color: var(--white);
+      text-decoration: none;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .nav-brand .brand-icon {
+      width: 32px; height: 32px;
+      background: var(--orange);
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+      box-shadow: 0 0 12px rgba(255,122,0,0.5);
+    }
+    .nav-brand .brand-dot {
+      width: 8px; height: 8px;
+      background: var(--orange);
+      border-radius: 50%;
+      animation: pulse 2.2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%,100%{ opacity:1; transform:scale(1); box-shadow: 0 0 0 0 rgba(255,122,0,0.6); }
+      50%{ opacity:.7; transform:scale(.85); box-shadow: 0 0 0 5px rgba(255,122,0,0); }
+    }
+    .nav-menu { display: flex; gap: 2px; align-items: center; }
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 6px 13px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 600;
+      transition: all .15s;
+      letter-spacing: 0.01em;
+    }
+    .nav-link:hover { color: var(--white); background: rgba(58,126,255,0.12); }
+    .nav-link.active { color: var(--orange); background: var(--orange-dim); border-bottom: 2px solid var(--orange); }
+    .nav-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .nav-user .badge {
+      background: var(--prog-blue);
+      border: 1px solid var(--smart-blue);
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--white);
+    }
+    .btn-logout {
+      background: none;
+      border: 1px solid var(--border-strong);
+      color: var(--text-muted);
+      padding: 5px 13px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all .15s;
+      font-family: var(--font);
+    }
+    .btn-logout:hover { border-color: var(--fail); color: var(--fail); background: var(--fail-dim); }
+
+    /* ── HAMBURGER ── */
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; color: var(--text); flex-direction: column; gap: 5px; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: currentColor; border-radius: 2px; transition: all .2s; }
+
+    /* ── MAIN ── */
+    .main { padding: 22px 18px; max-width: 920px; margin: 0 auto; }
+
+    /* ── FLASH ── */
+    .flash { padding: 12px 16px; border-radius: var(--radius); margin-bottom: 16px; font-size: 14px; font-weight: 500; border-left: 3px solid; display: flex; align-items: center; gap: 10px; }
+    .flash.success { background: var(--pass-dim); border-color: var(--pass); color: #4ade80; }
+    .flash.error   { background: var(--fail-dim); border-color: var(--fail); color: #f87171; }
+
+    /* ── CARDS ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+    .card-title {
+      font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .10em;
+      color: var(--orange); margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+    }
+    .card-title::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--border-strong), transparent); }
+
+    /* ── STAT GRID ── */
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+    .stat-card {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 14px; text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .stat-card.pass::before    { background: var(--pass); }
+    .stat-card.fail::before    { background: var(--fail); }
+    .stat-card.pending::before { background: var(--orange); }
+    .stat-num { font-size: 32px; font-weight: 800; line-height: 1; }
+    .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 5px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+    .stat-card.pass .stat-num    { color: var(--pass); }
+    .stat-card.fail .stat-num    { color: var(--fail); }
+    .stat-card.pending .stat-num { color: var(--orange); }
+
+    /* ── BADGES ── */
+    .badge-pass    { background: var(--pass-dim); color: #4ade80; border: 1px solid var(--pass); padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .badge-fail    { background: var(--fail-dim); color: #f87171; border: 1px solid var(--fail); padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .badge-pending { background: var(--orange-dim); color: var(--orange); border: 1px solid var(--orange); padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+
+    /* ── BUTTONS ── */
+    .btn { display: inline-flex; align-items: center; gap: 7px; padding: 10px 20px; border-radius: var(--radius); font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; border: none; transition: all .15s; white-space: nowrap; font-family: var(--font); letter-spacing: 0.01em; }
+    .btn-primary { background: var(--orange); color: var(--white); box-shadow: 0 2px 12px rgba(255,122,0,0.35); min-width: 160px; justify-content: center; height: 40px; line-height: 1; }
+    .btn-primary:hover { background: var(--orange-hover); box-shadow: 0 4px 18px rgba(255,122,0,0.5); transform: translateY(-1px); }
+    .btn-success { background: var(--pass); color: #000; font-weight: 700; }
+    .btn-success:hover { background: #22d06e; transform: translateY(-1px); }
+    .btn-danger { background: var(--fail); color: #fff; }
+    .btn-danger:hover { background: #ff5c5c; transform: translateY(-1px); }
+    .btn-blue { background: var(--smart-blue); color: var(--white); border: none; }
+    .btn-blue:hover { background: var(--prog-blue); transform: translateY(-1px); }
+    .btn-ghost { background: var(--orange); color: var(--white); border: none; }
+    .btn-ghost:hover { background: var(--orange-hover); transform: translateY(-1px); }
+    .btn-sm { padding: 6px 13px; font-size: 13px; }
+    .btn-teal { background: var(--pass); color: #000; font-weight: 700; border: none; min-width: 160px; justify-content: center; height: 40px; line-height: 1; }
+    .btn-teal:hover { background: #00b34a; transform: translateY(-1px); }
+    .btn-upload { background: var(--smart-blue); color: #fff; border: none; min-width: 160px; justify-content: center; height: 40px; line-height: 1; }
+    .btn-upload:hover { background: var(--prog-blue); transform: translateY(-1px); }
+    .btn-purple { background: #7C3AED; color: #fff; border: none; }
+    .btn-purple:hover { background: #6D28D9; transform: translateY(-1px); }
+
+    /* ── FORMS ── */
+    .form-group { margin-bottom: 15px; }
+    label { display: block; font-size: 12px; font-weight: 700; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .07em; }
+    input[type=text], input[type=password], input[type=date],
+    input[type=file], select, textarea {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 10px 13px; border-radius: var(--radius);
+      font-size: 15px; font-family: var(--font); transition: border-color .15s, box-shadow .15s;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px var(--orange-dim); }
+    select option { background: var(--navy-card); }
+    textarea { resize: vertical; min-height: 80px; }
+
+    /* ── TABLE ── */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .09em; color: var(--orange); border-bottom: 1px solid var(--border-strong); font-weight: 700; background: var(--surface2); }
+    td { padding: 12px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(58,126,255,0.06); }
+
+    /* ── CHECKBOX LIST ── */
+    .check-item { display: flex; align-items: center; gap: 13px; padding: 13px 15px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; cursor: pointer; transition: all .15s; background: var(--surface); }
+    .check-item:hover { border-color: var(--orange); background: var(--orange-dim); }
+    .check-item input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--orange); cursor: pointer; flex-shrink: 0; }
+    .check-item.checked { border-color: var(--pass); background: var(--pass-dim); }
+    .check-info { flex: 1; }
+    .check-name { font-weight: 700; font-size: 15px; }
+    .check-sub  { font-size: 12px; color: var(--text-muted); }
+
+    /* ── DISC HEADER ── */
+    .disc-header { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; color: var(--smart-blue); padding: 8px 0 6px; margin-top: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+
+    /* ── PAGE HEADER ── */
+    .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; flex-wrap: wrap; gap: 10px; }
+    .page-title { font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
+    .page-title span { color: var(--orange); }
+    .page-sub { font-size: 13px; color: var(--text-muted); font-weight: 500; margin-top: 2px; }
+
+    /* ── MOBILE ── */
+    @media (max-width: 640px) {
+      .hamburger { display: flex; }
+      .nav-menu { display: none; position: fixed; top: 58px; left: 0; right: 0; background: var(--navy); border-bottom: 2px solid var(--orange); flex-direction: column; padding: 12px; gap: 4px; z-index: 99; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+      .nav-menu.open { display: flex; }
+      .nav-link { width: 100%; padding: 12px 16px; font-size: 15px; }
+      .nav-user { display: none; }
+      .stat-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+      .stat-num { font-size: 24px; }
+      .main { padding: 14px 12px; }
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  {% if current_user.is_authenticated %}
+  <nav class="nav">
+    <a href="{{ url_for('dashboard') }}" class="nav-brand">
+      <span class="brand-icon">🧪</span>
+      AlcoCheck
+      <span class="brand-dot"></span>
+    </a>
+    <div class="nav-menu" id="navMenu">
+      <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}">Dashboard</a>
+      {% if current_user.role in ['admin','spv'] %}
+      <a href="{{ url_for('schedule') }}" class="nav-link {% if request.endpoint in ['schedule','upload_schedule'] %}active{% endif %}">Schedule</a>
+      <a href="{{ url_for('testing') }}" class="nav-link {% if request.endpoint in ['testing','submit_test'] %}active{% endif %}">Testing</a>
+      {% endif %}
+      <a href="{{ url_for('history') }}" class="nav-link {% if request.endpoint=='history' %}active{% endif %}">History</a>
+      {% if current_user.role == 'admin' %}
+      <a href="{{ url_for('employees') }}" class="nav-link {% if request.endpoint=='employees' %}active{% endif %}">Employees</a>
+      <a href="{{ url_for('users') }}" class="nav-link {% if request.endpoint=='users' %}active{% endif %}">Users</a>
+      {% endif %}
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:none;align-items:center;justify-content:space-between;gap:8px" class="mobile-user-row">
+        <span style="font-size:13px;color:var(--text-muted)">{{ current_user.full_name or current_user.username }} <span class="badge">{{ current_user.role }}</span></span>
+        <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
+      </div>
+    </div>
+    <div class="nav-user">
+      <span>{{ current_user.full_name or current_user.username }}</span>
+      <span class="badge">{{ current_user.role }}</span>
+      <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
+    </div>
+    <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+  {% endif %}
+
+  <div class="main">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for cat, msg in messages %}
+          <div class="flash {{ cat }}">
+            {% if cat == 'success' %}✅{% else %}⚠️{% endif %}
+            {{ msg }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </div>
+
+  <script>
+    function toggleMenu(){
+      document.getElementById('navMenu').classList.toggle('open');
+    }
+    document.querySelectorAll('.nav-link').forEach(l=>{
+      l.addEventListener('click',()=>{
+        document.getElementById('navMenu').classList.remove('open');
+      });
+    });
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
