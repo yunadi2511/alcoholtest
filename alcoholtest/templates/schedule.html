@@ -23,14 +23,14 @@
     </form>
     <form method="POST" action="{{ url_for('generate_selection') }}">
       <button type="submit" class="btn btn-primary"
-        onclick="return confirm('Generate random selection for all 7 days this week for {{ active_site.name if active_site else \"this site\" }}?')">
+        onclick="return confirm('Generate random selection for all 7 days this week?')">
         🎲 Generate Week Selection
       </button>
     </form>
     {% endif %}
     {% if current_user.role == 'admin' %}
     <form method="POST" action="{{ url_for('reset_week_schedule') }}"
-          onsubmit="return confirm('⚠️ WARNING: This will delete ALL selections and schedule for {{ active_site.name if active_site else \"this site\" }} this week. Cannot be undone. Are you sure?')">
+          onsubmit="return confirm('WARNING: This will delete ALL selections and schedule for this site this week. Cannot be undone. Are you sure?')">
       <button type="submit" class="btn btn-danger">🔄 Reset Week</button>
     </form>
     {% endif %}

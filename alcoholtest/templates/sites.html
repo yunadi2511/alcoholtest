@@ -95,23 +95,10 @@
             {{ site.created_at.strftime('%d %b %Y') }}
           </td>
           <td>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <!-- Switch to this site -->
-              {% if not active_site or active_site.id != site.id %}
-              <a href="{{ url_for('switch_site', site_id=site.id) }}"
-                 class="btn btn-sm btn-blue">
-                Switch
-              </a>
-              {% else %}
-              <span style="font-size:12px; color:var(--text-muted); padding:6px 0;">Current</span>
-              {% endif %}
-
-              <!-- Delete — only if no data -->
-              <form method="POST" action="{{ url_for('delete_site', site_id=site.id) }}"
-                    onsubmit="return confirm('Delete site {{ site.name }}? This cannot be undone.')">
-                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-              </form>
-            </div>
+            <form method="POST" action="{{ url_for('delete_site', site_id=site.id) }}"
+                  onsubmit="return confirm('Delete site {{ site.name }}? This cannot be undone.')">
+              <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+            </form>
           </td>
         </tr>
         {% endfor %}
