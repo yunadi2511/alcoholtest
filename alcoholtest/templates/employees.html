@@ -150,13 +150,13 @@
               <form method="POST" action="{{ url_for('toggle_employee', emp_id=emp.id) }}" style="display:inline">
                 <button type="submit" class="btn btn-purple btn-sm"
                   onclick="return confirm('{{ 'Deactivate' if emp.is_active else 'Activate' }} {{ emp.name }}?')">
-                  {{ '🚫' if emp.is_active else '✅' }}
+                  {{ '🚫 Off' if emp.is_active else '✅ On' }}
                 </button>
               </form>
               <form method="POST" action="{{ url_for('delete_employee', emp_id=emp.id) }}" style="display:inline">
                 <button type="submit" class="btn btn-danger btn-sm"
                   onclick="return confirm('⚠️ Delete {{ emp.name }}? This removes ALL their test history. Use Deactivate to preserve records. Sure?')">
-                  🗑
+                  🗑 Del
                 </button>
               </form>
             </div>
