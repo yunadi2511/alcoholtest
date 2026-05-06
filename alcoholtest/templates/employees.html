@@ -6,24 +6,35 @@
     <div class="page-title">Employee <span>Management</span></div>
     <div class="page-sub">{{ employees|length }} registered employees</div>
   </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
-    <button class="btn btn-primary" onclick="toggleAddForm()">+ Add Employee</button>
-    <a href="{{ url_for('download_employee_template') }}" class="btn btn-teal">📥 Employee Template</a>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+    <button class="btn btn-primary" style="height:36px" onclick="toggleAddForm()">+ Add Employee</button>
+    <a href="{{ url_for('download_employee_template') }}" class="btn btn-teal" style="height:36px">📥 Template</a>
     <form method="POST" action="{{ url_for('import_employees') }}"
           enctype="multipart/form-data" style="display:inline">
-      <div style="display:flex;gap:8px;align-items:center">
-        <label class="btn btn-upload" style="cursor:pointer;text-transform:none">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        {% if all_sites %}
+        <span style="font-size:10px;color:var(--orange);font-weight:700;text-transform:uppercase;letter-spacing:.06em">
+          ⚠️ Assign to site before import:
+        </span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select name="import_site_id" style="width:auto;padding:0 10px;height:36px;font-size:13px;border:1px solid var(--orange);border-radius:var(--radius);background:var(--surface2);color:var(--text)">
+            <option value="">— No site —</option>
+            {% for site in all_sites %}
+            <option value="{{ site.id }}">{{ site.name }}</option>
+            {% endfor %}
+          </select>
+          <label class="btn btn-upload" style="cursor:pointer;text-transform:none;height:36px;line-height:1;padding:0 14px;display:inline-flex;align-items:center">
+            📤 Import
+            <input type="file" name="employee_file" accept=".xlsx,.csv"
+                  style="display:none" onchange="this.form.submit()">
+          </label>
+        </div>
+        {% else %}
+        <label class="btn btn-upload" style="cursor:pointer;text-transform:none;height:36px;line-height:1;padding:0 14px;display:inline-flex;align-items:center">
           📤 Import Employees
           <input type="file" name="employee_file" accept=".xlsx,.csv"
                 style="display:none" onchange="this.form.submit()">
         </label>
-        {% if all_sites %}
-        <select name="import_site_id" style="width:auto;padding:8px 12px;height:40px;font-size:13px">
-          <option value="">No site assignment</option>
-          {% for site in all_sites %}
-          <option value="{{ site.id }}">→ {{ site.name }}</option>
-          {% endfor %}
-        </select>
         {% endif %}
       </div>
     </form>
@@ -56,8 +67,6 @@
                placeholder="Enter new discipline name"
                style="margin-top:8px;display:none">
       </div>
-
-      <!-- Site Assignment -->
       {% if all_sites %}
       <div class="form-group" style="margin:0;grid-column:span 2">
         <label>Assign to Site(s)</label>
@@ -70,8 +79,7 @@
           {% endfor %}
         </div>
         <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
-          ⚠️ Employees assigned to <strong>2 or more sites</strong> will be flagged as multi-site
-          and excluded from automatic random sampling.
+          ⚠️ Employees assigned to <strong>2 or more sites</strong> will be flagged as multi-site and excluded from automatic random sampling.
         </div>
       </div>
       {% else %}
@@ -80,7 +88,6 @@
       </div>
       {% endif %}
     </div>
-
     <div style="margin-top:14px;display:flex;gap:8px">
       <button type="submit" class="btn btn-success">Add Employee</button>
       <button type="button" class="btn btn-ghost" onclick="toggleAddForm()">Cancel</button>
@@ -123,7 +130,7 @@
               <span style="background:var(--orange-dim);border:1px solid var(--orange);color:var(--orange);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;margin-right:3px">{{ site.name }}</span>
               {% endfor %}
             {% else %}
-              <span style="color:var(--text-muted);font-size:13px">—</span>
+              <span style="color:var(--fail);font-size:12px" title="No site assigned — won't appear in any schedule">⚠️ None</span>
             {% endif %}
           </td>
           <td style="font-size:13px;color:var(--text-muted)">
@@ -138,8 +145,9 @@
             {% endif %}
           </td>
           <td>
-            <div style="display:flex;gap:5px;align-items:center;flex-wrap:nowrap">
+            <div style="display:flex;gap:4px;align-items:center">
               <button type="button" class="btn btn-primary btn-sm"
+                style="width:64px;height:30px;padding:0;justify-content:center;font-size:12px"
                 onclick="openEdit(
                   {{ emp.id }},
                   {{ emp.name | tojson }},
@@ -149,13 +157,15 @@
                 )">✏️ Edit</button>
               <form method="POST" action="{{ url_for('toggle_employee', emp_id=emp.id) }}" style="display:inline">
                 <button type="submit" class="btn btn-purple btn-sm"
+                  style="width:50px;height:30px;padding:0;justify-content:center;font-size:12px"
                   onclick="return confirm('{{ 'Deactivate' if emp.is_active else 'Activate' }} {{ emp.name }}?')">
                   {{ '🚫 Off' if emp.is_active else '✅ On' }}
                 </button>
               </form>
               <form method="POST" action="{{ url_for('delete_employee', emp_id=emp.id) }}" style="display:inline">
                 <button type="submit" class="btn btn-danger btn-sm"
-                  onclick="return confirm('⚠️ Delete {{ emp.name }}? This removes ALL their test history. Use Deactivate to preserve records. Sure?')">
+                  style="width:50px;height:30px;padding:0;justify-content:center;font-size:12px"
+                  onclick="return confirm('⚠️ Delete {{ emp.name }}? Removes ALL test history. Use Deactivate to preserve records. Sure?')">
                   🗑 Del
                 </button>
               </form>
@@ -189,8 +199,6 @@
           {% endfor %}
         </select>
       </div>
-
-      <!-- Site assignment in edit modal -->
       {% if all_sites %}
       <div class="form-group">
         <label>Assign to Site(s)</label>
@@ -208,7 +216,6 @@
         </div>
       </div>
       {% endif %}
-
       <div style="display:flex;gap:8px;margin-top:16px">
         <button type="submit" class="btn btn-primary">Save Changes</button>
         <button type="button" class="btn btn-ghost" onclick="closeEdit()">Cancel</button>
@@ -221,34 +228,25 @@
 
 {% block scripts %}
 <script>
-// ── Add form toggle
 function toggleAddForm(){
   const f = document.getElementById('addForm');
   f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
-
-// ── Search filter
 function filterTable(q){
   q = q.toLowerCase();
   document.querySelectorAll('.emp-row').forEach(row => {
     row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
   });
 }
-
-// ── Open edit modal
 function openEdit(id, name, empId, discipline, siteIds) {
   document.getElementById('editName').value = name;
   document.getElementById('editEmpId').value = empId;
   document.getElementById('editDiscipline').value = discipline;
   document.getElementById('editForm').action = '/employees/edit/' + id;
-
-  // Reset all site checkboxes first
   document.querySelectorAll('#editSiteChecks input[type=checkbox]').forEach(cb => {
     cb.checked = false;
     cb.closest('.site-check-label').classList.remove('checked');
   });
-
-  // Check the ones this employee is assigned to
   if (siteIds) {
     siteIds.forEach(siteId => {
       const cb = document.getElementById('editSiteCb_' + siteId);
@@ -258,20 +256,14 @@ function openEdit(id, name, empId, discipline, siteIds) {
       }
     });
   }
-
   document.getElementById('editModal').style.display = 'flex';
 }
-
 function closeEdit() {
   document.getElementById('editModal').style.display = 'none';
 }
-
-// Close modal on backdrop click
 document.getElementById('editModal').addEventListener('click', function(e){
   if (e.target === this) closeEdit();
 });
-
-// ── New discipline input handler
 document.querySelector('select[name=discipline]')?.addEventListener('change', function(){
   const inp = document.getElementById('newDiscInput');
   if(this.value === '__new__'){
@@ -285,8 +277,6 @@ document.querySelector('select[name=discipline]')?.addEventListener('change', fu
     this.name = 'discipline';
   }
 });
-
-// ── Site checkbox styling (add form)
 document.querySelectorAll('.site-check-label input[type=checkbox]').forEach(cb => {
   const label = cb.closest('.site-check-label');
   if (cb.checked) label.classList.add('checked');
