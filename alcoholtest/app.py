@@ -17,6 +17,11 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///alcoholtest.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+app.config['SITE_NAME'] = os.environ.get('SITE_NAME', 'AlcoCheck')
+
+@app.context_processor
+def inject_site_name():
+    return dict(site_name=app.config['SITE_NAME'])
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 DATA_RETENTION_DAYS = 60
