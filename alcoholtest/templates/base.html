@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>{% block title %}AlcoCheck{% endblock %} — JKT2</title>
+  <title>{% block title %}AlcoCheck{% endblock %} — {{ active_site.name if active_site else 'AlcoCheck' }}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
   <style>
@@ -139,6 +139,79 @@
     }
     .btn-logout:hover { border-color: var(--fail); color: var(--fail); background: var(--fail-dim); }
 
+    /* ── SITE SWITCHER ── */
+    .site-switcher {
+      position: relative;
+      display: inline-block;
+    }
+    .site-switcher-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--orange-dim);
+      border: 1px solid var(--orange);
+      color: var(--orange);
+      padding: 5px 12px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      transition: all .15s;
+      font-family: var(--font);
+      white-space: nowrap;
+    }
+    .site-switcher-btn:hover { background: var(--orange); color: var(--white); }
+    .site-switcher-btn .arrow {
+      font-size: 10px;
+      transition: transform .2s;
+    }
+    .site-switcher-btn.open .arrow { transform: rotate(180deg); }
+    .site-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      background: var(--navy-card);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius);
+      min-width: 160px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      z-index: 200;
+      overflow: hidden;
+    }
+    .site-dropdown.open { display: block; }
+    .site-dropdown-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .10em;
+      color: var(--text-muted);
+      padding: 10px 14px 6px;
+    }
+    .site-dropdown a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background .12s;
+      border-top: 1px solid var(--border);
+    }
+    .site-dropdown a:hover { background: rgba(58,126,255,0.12); color: var(--white); }
+    .site-dropdown a.current { color: var(--orange); background: var(--orange-dim); }
+    .site-dropdown a .site-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border-strong);
+      flex-shrink: 0;
+    }
+    .site-dropdown a.current .site-dot { background: var(--orange); }
+
     /* ── HAMBURGER ── */
     .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; color: var(--text); flex-direction: column; gap: 5px; }
     .hamburger span { display: block; width: 22px; height: 2px; background: currentColor; border-radius: 2px; transition: all .2s; }
@@ -240,6 +313,19 @@
     .page-title span { color: var(--orange); }
     .page-sub { font-size: 13px; color: var(--text-muted); font-weight: 500; margin-top: 2px; }
 
+    /* ── SITE CHECKBOXES ── */
+    .site-checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .site-check-label {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--surface2); border: 1px solid var(--border);
+      padding: 6px 12px; border-radius: 20px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: all .15s; color: var(--text-muted);
+    }
+    .site-check-label:hover { border-color: var(--orange); color: var(--orange); }
+    .site-check-label input[type=checkbox] { accent-color: var(--orange); width: 14px; height: 14px; }
+    .site-check-label.checked { border-color: var(--orange); background: var(--orange-dim); color: var(--orange); }
+
     /* ── MOBILE ── */
     @media (max-width: 640px) {
       .hamburger { display: flex; }
@@ -250,6 +336,7 @@
       .stat-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
       .stat-num { font-size: 24px; }
       .main { padding: 14px 12px; }
+      .site-switcher-btn span:not(.arrow) { display: none; }
     }
   </style>
   {% block head %}{% endblock %}
@@ -262,6 +349,7 @@
       AlcoCheck
       <span class="brand-dot"></span>
     </a>
+
     <div class="nav-menu" id="navMenu">
       <a href="{{ url_for('dashboard') }}" class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}">Dashboard</a>
       {% if current_user.role in ['admin','spv'] %}
@@ -272,17 +360,42 @@
       {% if current_user.role == 'admin' %}
       <a href="{{ url_for('employees') }}" class="nav-link {% if request.endpoint=='employees' %}active{% endif %}">Employees</a>
       <a href="{{ url_for('users') }}" class="nav-link {% if request.endpoint=='users' %}active{% endif %}">Users</a>
+      <a href="{{ url_for('sites') }}" class="nav-link {% if request.endpoint=='sites' %}active{% endif %}">Sites</a>
       {% endif %}
+      <!-- Mobile user row -->
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:none;align-items:center;justify-content:space-between;gap:8px" class="mobile-user-row">
         <span style="font-size:13px;color:var(--text-muted)">{{ current_user.full_name or current_user.username }} <span class="badge">{{ current_user.role }}</span></span>
         <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
       </div>
     </div>
+
     <div class="nav-user">
+      <!-- Site Switcher — only show if user has access to more than 1 site -->
+      {% if user_sites and user_sites|length > 0 %}
+      <div class="site-switcher" id="siteSwitcher">
+        <button class="site-switcher-btn" id="siteSwitcherBtn" onclick="toggleSiteSwitcher()">
+          📍 <span>{{ active_site.name if active_site else 'Select Site' }}</span>
+          <span class="arrow">▼</span>
+        </button>
+        <div class="site-dropdown" id="siteDropdown">
+          <div class="site-dropdown-label">Switch Site</div>
+          {% for site in user_sites %}
+          <a href="{{ url_for('switch_site', site_id=site.id) }}"
+             class="{% if active_site and active_site.id == site.id %}current{% endif %}">
+            <span class="site-dot"></span>
+            {{ site.name }}
+            {% if active_site and active_site.id == site.id %}✓{% endif %}
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
       <span>{{ current_user.full_name or current_user.username }}</span>
       <span class="badge">{{ current_user.role }}</span>
       <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
     </div>
+
     <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
       <span></span><span></span><span></span>
     </button>
@@ -304,12 +417,39 @@
   </div>
 
   <script>
+    // Hamburger menu
     function toggleMenu(){
       document.getElementById('navMenu').classList.toggle('open');
     }
     document.querySelectorAll('.nav-link').forEach(l=>{
       l.addEventListener('click',()=>{
         document.getElementById('navMenu').classList.remove('open');
+      });
+    });
+
+    // Site switcher dropdown
+    function toggleSiteSwitcher(){
+      const btn = document.getElementById('siteSwitcherBtn');
+      const dropdown = document.getElementById('siteDropdown');
+      btn.classList.toggle('open');
+      dropdown.classList.toggle('open');
+    }
+
+    // Close site dropdown when clicking outside
+    document.addEventListener('click', function(e){
+      const switcher = document.getElementById('siteSwitcher');
+      if (switcher && !switcher.contains(e.target)){
+        document.getElementById('siteSwitcherBtn')?.classList.remove('open');
+        document.getElementById('siteDropdown')?.classList.remove('open');
+      }
+    });
+
+    // Site checkboxes styling (used in employees/users forms)
+    document.querySelectorAll('.site-check-label input[type=checkbox]').forEach(cb => {
+      const label = cb.closest('.site-check-label');
+      if (cb.checked) label.classList.add('checked');
+      cb.addEventListener('change', () => {
+        label.classList.toggle('checked', cb.checked);
       });
     });
   </script>

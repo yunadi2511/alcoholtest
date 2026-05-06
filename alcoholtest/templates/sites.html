@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Sites{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-title">Site <span>Management</span></div>
+    <div class="page-sub">Create and manage testing sites. Each site has its own schedule, selection, and test results.</div>
+  </div>
+</div>
+
+<!-- ── ADD SITE FORM ── -->
+<div class="card">
+  <div class="card-title">➕ Add New Site</div>
+  <form method="POST" action="{{ url_for('add_site') }}">
+    <div style="display:grid; grid-template-columns:1fr 2fr auto; gap:12px; align-items:end;">
+      <div class="form-group" style="margin-bottom:0">
+        <label>Site Code</label>
+        <input type="text" name="name" placeholder="e.g. JKT1, JKT3" required
+               maxlength="20" style="text-transform:uppercase"
+               oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Description <span style="font-weight:400;text-transform:none;color:var(--text-muted)">(optional)</span></label>
+        <input type="text" name="description" placeholder="e.g. Jakarta Plant 1 — West Area">
+      </div>
+      <button type="submit" class="btn btn-primary" style="min-width:120px">
+        + Add Site
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- ── SITES LIST ── -->
+<div class="card">
+  <div class="card-title">🏭 All Sites</div>
+
+  {% if sites %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Site Code</th>
+          <th>Description</th>
+          <th>Employees</th>
+          <th>Users</th>
+          <th>Created</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for site in sites %}
+        <tr>
+          <td>
+            <span style="
+              background: var(--orange-dim);
+              border: 1px solid var(--orange);
+              color: var(--orange);
+              padding: 4px 12px;
+              border-radius: 20px;
+              font-size: 13px;
+              font-weight: 800;
+              letter-spacing: .06em;
+              text-transform: uppercase;
+            ">{{ site.name }}</span>
+            {% if active_site and active_site.id == site.id %}
+            <span style="
+              background: var(--pass-dim);
+              border: 1px solid var(--pass);
+              color: #4ade80;
+              padding: 2px 8px;
+              border-radius: 20px;
+              font-size: 11px;
+              font-weight: 700;
+              margin-left: 6px;
+            ">ACTIVE</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--text-muted); font-size:14px;">
+            {{ site.description or '—' }}
+          </td>
+          <td>
+            <span style="font-weight:700; color:var(--smart-blue);">
+              {{ site.employees|length }}
+            </span>
+            <span style="font-size:12px; color:var(--text-muted);"> employees</span>
+          </td>
+          <td>
+            <span style="font-weight:700; color:var(--smart-blue);">
+              {{ site.users|length }}
+            </span>
+            <span style="font-size:12px; color:var(--text-muted);"> users</span>
+          </td>
+          <td style="font-size:13px; color:var(--text-muted);">
+            {{ site.created_at.strftime('%d %b %Y') }}
+          </td>
+          <td>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <!-- Switch to this site -->
+              {% if not active_site or active_site.id != site.id %}
+              <a href="{{ url_for('switch_site', site_id=site.id) }}"
+                 class="btn btn-sm btn-blue">
+                Switch
+              </a>
+              {% else %}
+              <span style="font-size:12px; color:var(--text-muted); padding:6px 0;">Current</span>
+              {% endif %}
+
+              <!-- Delete — only if no data -->
+              <form method="POST" action="{{ url_for('delete_site', site_id=site.id) }}"
+                    onsubmit="return confirm('Delete site {{ site.name }}? This cannot be undone.')">
+                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% else %}
+  <!-- Empty state -->
+  <div style="text-align:center; padding:40px 20px; color:var(--text-muted);">
+    <div style="font-size:40px; margin-bottom:12px;">🏭</div>
+    <div style="font-size:16px; font-weight:700; color:var(--text); margin-bottom:6px;">No sites yet</div>
+    <div style="font-size:14px;">Add your first site using the form above.</div>
+    <div style="font-size:13px; margin-top:8px;">Example: <strong style="color:var(--orange)">JKT1</strong>, <strong style="color:var(--orange)">JKT2</strong>, <strong style="color:var(--orange)">SBY1</strong></div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── INFO BOX ── -->
+<div style="
+  background: rgba(58,126,255,0.06);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--smart-blue);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.7;
+">
+  <strong style="color:var(--smart-blue);">ℹ️ How sites work:</strong><br>
+  • Each site has its own <strong style="color:var(--text)">schedule, daily selection, and test results</strong> — data is fully separated.<br>
+  • Assign employees to a site via the <a href="{{ url_for('employees') }}" style="color:var(--orange)">Employees</a> page.<br>
+  • Assign users to a site via the <a href="{{ url_for('users') }}" style="color:var(--orange)">Users</a> page.<br>
+  • Employees assigned to <strong style="color:var(--text)">multiple sites</strong> are flagged as multi-site and excluded from automatic random sampling.<br>
+  • A site <strong style="color:var(--text)">cannot be deleted</strong> if it has existing schedule or test data.
+</div>
+
+{% endblock %}

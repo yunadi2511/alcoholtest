@@ -3,15 +3,15 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <div class="page-title">User Management</div>
+    <div class="page-title">User <span>Management</span></div>
     <div class="page-sub">{{ users|length }} system users</div>
   </div>
   <button class="btn btn-primary" onclick="toggleAddForm()">+ Add User</button>
 </div>
 
-<!-- ADD FORM -->
+<!-- ── ADD FORM ── -->
 <div class="card" id="addForm" style="display:none;border-color:var(--accent)">
-  <div class="card-title">Add New User</div>
+  <div class="card-title">➕ Add New User</div>
   <form method="POST" action="{{ url_for('add_user') }}">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-group" style="margin:0">
@@ -28,14 +28,37 @@
       </div>
       <div class="form-group" style="margin:0">
         <label>Role</label>
-        <select name="role" required>
+        <select name="role" id="addRole" required onchange="toggleSiteSection('addSiteSection', this.value)">
           <option value="">Select role...</option>
           <option value="admin">Admin</option>
           <option value="spv">Supervisor (SPV)</option>
           <option value="viewer">Viewer</option>
         </select>
       </div>
+
+      <!-- Site Assignment -->
+      <div class="form-group" style="margin:0;grid-column:span 2" id="addSiteSection">
+        <label>Assign to Site(s)</label>
+        {% if all_sites %}
+        <div class="site-checks">
+          {% for site in all_sites %}
+          <label class="site-check-label">
+            <input type="checkbox" name="site_ids" value="{{ site.id }}">
+            {{ site.name }}
+          </label>
+          {% endfor %}
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+          Admin role automatically gets access to all sites regardless of selection.
+        </div>
+        {% else %}
+        <div style="padding:10px;background:var(--orange-dim);border:1px solid var(--orange);border-radius:var(--radius);font-size:13px;color:var(--orange)">
+          ⚠️ No sites created yet. <a href="{{ url_for('sites') }}" style="color:var(--orange);font-weight:700">Create a site first.</a>
+        </div>
+        {% endif %}
+      </div>
     </div>
+
     <div style="margin-top:14px;display:flex;gap:8px">
       <button type="submit" class="btn btn-success">Create User</button>
       <button type="button" class="btn btn-ghost" onclick="toggleAddForm()">Cancel</button>
@@ -43,28 +66,28 @@
   </form>
 </div>
 
-<!-- ROLE LEGEND -->
+<!-- ── ROLE LEGEND ── -->
 <div class="card">
-  <div class="card-title">Role Permissions</div>
+  <div class="card-title">🔐 Role Permissions</div>
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;font-size:13px">
     <div style="padding:12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)">
       <div style="font-weight:700;color:var(--accent);margin-bottom:6px">ADMIN</div>
-      <div style="color:var(--text-muted)">Full access: manage users, employees, view all data, record tests</div>
+      <div style="color:var(--text-muted)">Full access to all sites. Manage users, employees, sites, and all data.</div>
     </div>
     <div style="padding:12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)">
       <div style="font-weight:700;color:var(--pass);margin-bottom:6px">SUPERVISOR</div>
-      <div style="color:var(--text-muted)">View schedule, generate selection, record test results</div>
+      <div style="color:var(--text-muted)">Access to assigned sites only. View schedule, generate selection, record test results.</div>
     </div>
     <div style="padding:12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)">
       <div style="font-weight:700;color:var(--text-muted);margin-bottom:6px">VIEWER</div>
-      <div style="color:var(--text-muted)">View dashboard and history only, read-only access</div>
+      <div style="color:var(--text-muted)">Access to assigned sites only. View dashboard and history, read-only.</div>
     </div>
   </div>
 </div>
 
-<!-- USER LIST -->
+<!-- ── USER LIST ── -->
 <div class="card">
-  <div class="card-title">System Users</div>
+  <div class="card-title">👤 System Users</div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -72,6 +95,7 @@
           <th>Name</th>
           <th>Username</th>
           <th>Role</th>
+          <th>Sites</th>
           <th>Created</th>
           <th>Action</th>
         </tr>
@@ -83,26 +107,47 @@
           <td style="font-family:var(--mono);font-size:13px">{{ u.username }}</td>
           <td>
             <span style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;
-              {% if u.role=='admin' %}color:var(--accent){% elif u.role=='spv' %}color:var(--pass){% else %}color:var(--text-muted){% endif %}">
+              {% if u.role=='admin' %}color:var(--accent)
+              {% elif u.role=='spv' %}color:var(--pass)
+              {% else %}color:var(--text-muted){% endif %}">
               {{ u.role }}
             </span>
           </td>
-          <td style="font-size:13px;color:var(--text-muted)">{{ u.created_at.strftime('%d %b %Y') }}</td>
-          <td style="display:flex;gap:6px;align-items:center">
-            {% if u.id != current_user.id %}
-            <button class="btn btn-blue btn-sm" onclick="openEdit({{ u.id }}, '{{ u.full_name }}', '{{ u.username }}', '{{ u.role }}')">
-              Edit
-            </button>
-            <form method="POST" action="{{ url_for('delete_user', user_id=u.id) }}" style="display:inline">
-              <button type="submit" class="btn btn-danger btn-sm"
-                onclick="return confirm('Delete user {{ u.username }}? This cannot be undone.')">
-                Delete
-              </button>
-            </form>
+          <td>
+            {% if u.role == 'admin' %}
+              <span style="color:var(--text-muted);font-size:12px;font-style:italic">All sites</span>
+            {% elif u.sites %}
+              {% for site in u.sites %}
+              <span style="background:var(--orange-dim);border:1px solid var(--orange);color:var(--orange);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;margin-right:3px">{{ site.name }}</span>
+              {% endfor %}
+            {% else %}
+              <span style="color:var(--fail);font-size:12px">⚠️ No site</span>
+            {% endif %}
           </td>
-          {% else %}
-          <span style="color:var(--text-muted);font-size:13px">You</span>
-          {% endif %}
+          <td style="font-size:13px;color:var(--text-muted)">{{ u.created_at.strftime('%d %b %Y') }}</td>
+          <td>
+            {% if u.id != current_user.id %}
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="btn btn-blue btn-sm"
+                onclick="openEdit(
+                  {{ u.id }},
+                  {{ u.full_name | tojson }},
+                  {{ u.username | tojson }},
+                  {{ u.role | tojson }},
+                  {{ u.sites | map(attribute='id') | list | tojson }}
+                )">
+                ✏️ Edit
+              </button>
+              <form method="POST" action="{{ url_for('delete_user', user_id=u.id) }}" style="display:inline">
+                <button type="submit" class="btn btn-danger btn-sm"
+                  onclick="return confirm('Delete user {{ u.username }}? This cannot be undone.')">
+                  Delete
+                </button>
+              </form>
+            </div>
+            {% else %}
+            <span style="color:var(--text-muted);font-size:13px">You</span>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -111,11 +156,10 @@
   </div>
 </div>
 
-
-<!-- EDIT MODAL -->
-<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center">
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:380px;max-width:90vw">
-    <div class="card-title">Edit User</div>
+<!-- ── EDIT MODAL ── -->
+<div id="editModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:420px;max-width:90vw;max-height:90vh;overflow-y:auto">
+    <div class="card-title">✏️ Edit User</div>
     <form method="POST" id="editForm">
       <div class="form-group">
         <label>Full Name</label>
@@ -127,16 +171,39 @@
       </div>
       <div class="form-group">
         <label>Role</label>
-        <select name="role" id="edit_role" required>
+        <select name="role" id="edit_role" required
+                onchange="toggleSiteSection('editSiteSection', this.value)">
           <option value="admin">Admin</option>
           <option value="spv">Supervisor (SPV)</option>
           <option value="viewer">Viewer</option>
         </select>
       </div>
       <div class="form-group">
-        <label>New Password (leave blank to keep current)</label>
+        <label>New Password <span style="font-weight:400;text-transform:none">(leave blank to keep current)</span></label>
         <input type="password" name="password" placeholder="Leave blank = no change">
       </div>
+
+      <!-- Site assignment in edit modal -->
+      <div class="form-group" id="editSiteSection">
+        <label>Assign to Site(s)</label>
+        {% if all_sites %}
+        <div class="site-checks" id="editSiteChecks">
+          {% for site in all_sites %}
+          <label class="site-check-label" id="editUserSiteLabel_{{ site.id }}">
+            <input type="checkbox" name="site_ids" value="{{ site.id }}"
+                   id="editUserSiteCb_{{ site.id }}">
+            {{ site.name }}
+          </label>
+          {% endfor %}
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+          Admin role automatically gets access to all sites.
+        </div>
+        {% else %}
+        <div style="font-size:13px;color:var(--text-muted)">No sites available.</div>
+        {% endif %}
+      </div>
+
       <div style="display:flex;gap:8px;margin-top:16px">
         <button type="submit" class="btn btn-primary">Save Changes</button>
         <button type="button" class="btn btn-ghost" onclick="closeEdit()">Cancel</button>
@@ -145,10 +212,10 @@
   </div>
 </div>
 
-<!-- DANGER ZONE -->
+<!-- ── DANGER ZONE ── -->
 {% if current_user.role == 'admin' %}
 <div class="card" style="border-color:var(--fail)">
-  <div class="card-title" style="color:var(--fail)">Danger Zone</div>
+  <div class="card-title" style="color:var(--fail)">⚠️ Danger Zone</div>
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
     <div>
       <div style="font-weight:600;margin-bottom:4px">Run Data Cleanup</div>
@@ -166,24 +233,78 @@
 </div>
 {% endif %}
 
-
 {% endblock %}
+
 {% block scripts %}
 <script>
+// ── Add form toggle
 function toggleAddForm(){
   const f = document.getElementById('addForm');
-  f.style.display = f.style.display==='none' ? 'block' : 'none';
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
-function openEdit(id, fullName, username, role) {
+
+// ── Show/hide site section based on role
+// Admin role note is shown but checkboxes are greyed out
+function toggleSiteSection(sectionId, role) {
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  const checkboxes = section.querySelectorAll('input[type=checkbox]');
+  if (role === 'admin') {
+    // Admin gets all sites automatically — dim the checkboxes
+    checkboxes.forEach(cb => cb.disabled = true);
+    section.style.opacity = '0.5';
+  } else {
+    checkboxes.forEach(cb => cb.disabled = false);
+    section.style.opacity = '1';
+  }
+}
+
+// ── Open edit modal
+function openEdit(id, fullName, username, role, siteIds) {
   document.getElementById('editForm').action = '/users/edit/' + id;
   document.getElementById('edit_full_name').value = fullName;
   document.getElementById('edit_username').value = username;
   document.getElementById('edit_role').value = role;
-  const m = document.getElementById('editModal');
-  m.style.display = 'flex';
+
+  // Reset all site checkboxes
+  document.querySelectorAll('#editSiteChecks input[type=checkbox]').forEach(cb => {
+    cb.checked = false;
+    cb.closest('.site-check-label').classList.remove('checked');
+  });
+
+  // Tick assigned sites
+  if (siteIds) {
+    siteIds.forEach(siteId => {
+      const cb = document.getElementById('editUserSiteCb_' + siteId);
+      if (cb) {
+        cb.checked = true;
+        cb.closest('.site-check-label').classList.add('checked');
+      }
+    });
+  }
+
+  // Apply role-based dimming
+  toggleSiteSection('editSiteSection', role);
+
+  document.getElementById('editModal').style.display = 'flex';
 }
+
 function closeEdit() {
   document.getElementById('editModal').style.display = 'none';
 }
+
+// Close modal on backdrop click
+document.getElementById('editModal').addEventListener('click', function(e){
+  if (e.target === this) closeEdit();
+});
+
+// ── Site checkbox styling
+document.querySelectorAll('.site-check-label input[type=checkbox]').forEach(cb => {
+  const label = cb.closest('.site-check-label');
+  if (cb.checked) label.classList.add('checked');
+  cb.addEventListener('change', () => {
+    label.classList.toggle('checked', cb.checked);
+  });
+});
 </script>
 {% endblock %}

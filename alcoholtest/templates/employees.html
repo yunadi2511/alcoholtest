@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <div class="page-title">Employee Management</div>
+    <div class="page-title">Employee <span>Management</span></div>
     <div class="page-sub">{{ employees|length }} registered employees</div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -11,18 +11,28 @@
     <a href="{{ url_for('download_employee_template') }}" class="btn btn-teal">📥 Employee Template</a>
     <form method="POST" action="{{ url_for('import_employees') }}"
           enctype="multipart/form-data" style="display:inline">
-      <label class="btn btn-upload" style="cursor:pointer;text-transform:none">
-        📤 Import Employees
-        <input type="file" name="employee_file" accept=".xlsx,.csv"
-              style="display:none" onchange="this.form.submit()">
-      </label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label class="btn btn-upload" style="cursor:pointer;text-transform:none">
+          📤 Import Employees
+          <input type="file" name="employee_file" accept=".xlsx,.csv"
+                style="display:none" onchange="this.form.submit()">
+        </label>
+        {% if all_sites %}
+        <select name="import_site_id" style="width:auto;padding:8px 12px;height:40px;font-size:13px">
+          <option value="">No site assignment</option>
+          {% for site in all_sites %}
+          <option value="{{ site.id }}">→ {{ site.name }}</option>
+          {% endfor %}
+        </select>
+        {% endif %}
+      </div>
     </form>
   </div>
 </div>
 
-<!-- ADD FORM -->
+<!-- ── ADD FORM ── -->
 <div class="card" id="addForm" style="display:none;border-color:var(--accent)">
-  <div class="card-title">Add New Employee</div>
+  <div class="card-title">➕ Add New Employee</div>
   <form method="POST" action="{{ url_for('add_employee') }}">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-group" style="margin:0">
@@ -42,9 +52,35 @@
           {% endfor %}
           <option value="__new__" id="newDiscOpt">+ Add new discipline...</option>
         </select>
-        <input type="text" name="discipline_new" id="newDiscInput" placeholder="Enter new discipline name" style="margin-top:8px;display:none">
+        <input type="text" name="discipline_new" id="newDiscInput"
+               placeholder="Enter new discipline name"
+               style="margin-top:8px;display:none">
       </div>
+
+      <!-- Site Assignment -->
+      {% if all_sites %}
+      <div class="form-group" style="margin:0;grid-column:span 2">
+        <label>Assign to Site(s)</label>
+        <div class="site-checks">
+          {% for site in all_sites %}
+          <label class="site-check-label">
+            <input type="checkbox" name="site_ids" value="{{ site.id }}">
+            {{ site.name }}
+          </label>
+          {% endfor %}
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+          ⚠️ Employees assigned to <strong>2 or more sites</strong> will be flagged as multi-site
+          and excluded from automatic random sampling.
+        </div>
+      </div>
+      {% else %}
+      <div style="grid-column:span 2;padding:10px;background:var(--orange-dim);border:1px solid var(--orange);border-radius:var(--radius);font-size:13px;color:var(--orange)">
+        ⚠️ No sites created yet. <a href="{{ url_for('sites') }}" style="color:var(--orange);font-weight:700">Create a site first</a> before adding employees.
+      </div>
+      {% endif %}
     </div>
+
     <div style="margin-top:14px;display:flex;gap:8px">
       <button type="submit" class="btn btn-success">Add Employee</button>
       <button type="button" class="btn btn-ghost" onclick="toggleAddForm()">Cancel</button>
@@ -52,10 +88,11 @@
   </form>
 </div>
 
-<!-- EMPLOYEE TABLE -->
+<!-- ── EMPLOYEE TABLE ── -->
 <div class="card">
-  <div class="card-title">All Employees</div>
-  <input type="text" placeholder="Search..." oninput="filterTable(this.value)" style="margin-bottom:14px">
+  <div class="card-title">👥 All Employees</div>
+  <input type="text" placeholder="Search by name, ID, or discipline..."
+         oninput="filterTable(this.value)" style="margin-bottom:14px">
   <div class="table-wrap">
     <table id="empTable">
       <thead>
@@ -63,6 +100,7 @@
           <th>Name</th>
           <th>ID</th>
           <th>Discipline</th>
+          <th>Sites</th>
           <th>Last Tested</th>
           <th>Status</th>
           <th>Action</th>
@@ -71,9 +109,23 @@
       <tbody>
         {% for emp in employees %}
         <tr class="emp-row">
-          <td style="font-weight:600">{{ emp.name }}</td>
+          <td style="font-weight:600">
+            {{ emp.name }}
+            {% if emp.is_multisite %}
+            <span style="background:rgba(124,58,237,0.15);color:#a78bfa;border:1px solid #7C3AED;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;margin-left:4px">MULTI-SITE</span>
+            {% endif %}
+          </td>
           <td style="font-family:var(--mono);font-size:13px">{{ emp.employee_id }}</td>
           <td style="font-size:13px;color:var(--text-muted)">{{ emp.discipline }}</td>
+          <td>
+            {% if emp.sites %}
+              {% for site in emp.sites %}
+              <span style="background:var(--orange-dim);border:1px solid var(--orange);color:var(--orange);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;margin-right:3px">{{ site.name }}</span>
+              {% endfor %}
+            {% else %}
+              <span style="color:var(--text-muted);font-size:13px">—</span>
+            {% endif %}
+          </td>
           <td style="font-size:13px;color:var(--text-muted)">
             {% set last = emp.last_tested_date() %}
             {% if last %}{{ last.strftime('%d %b %Y') }}{% else %}Never{% endif %}
@@ -82,12 +134,18 @@
             {% if emp.is_active %}
               <span class="badge-pass">Active</span>
             {% else %}
-              <span style="background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:20px;font-size:12px;font-family:var(--mono)">Inactive</span>
+              <span style="background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:20px;font-size:12px">Inactive</span>
             {% endif %}
           </td>
           <td style="display:flex;gap:6px;flex-wrap:wrap">
             <button type="button" class="btn btn-primary btn-sm" style="min-width:80px;height:42px;line-height:1"
-              onclick="openEdit({{ emp.id }}, '{{ emp.name }}', '{{ emp.employee_id }}', '{{ emp.discipline }}')">
+              onclick="openEdit(
+                {{ emp.id }},
+                {{ emp.name | tojson }},
+                {{ emp.employee_id | tojson }},
+                {{ emp.discipline | tojson }},
+                {{ emp.sites | map(attribute='id') | list | tojson }}
+              )">
               ✏️ Edit
             </button>
             <form method="POST" action="{{ url_for('toggle_employee', emp_id=emp.id) }}" style="display:inline">
@@ -98,7 +156,7 @@
             </form>
             <form method="POST" action="{{ url_for('delete_employee', emp_id=emp.id) }}" style="display:inline">
               <button type="submit" class="btn btn-danger btn-sm"
-                onclick="return confirm('⚠️ WARNING: Deleting {{ emp.name }} will permanently remove ALL their test history and records.\n\nIf this employee has resigned, use DEACTIVATE instead to preserve audit records.\n\nOnly delete if this employee was added by mistake.\n\nAre you absolutely sure you want to delete?')">
+                onclick="return confirm('⚠️ WARNING: Deleting {{ emp.name }} will permanently remove ALL their test history.\n\nUse DEACTIVATE instead to preserve records.\n\nDelete only if added by mistake.\n\nAre you sure?')">
                 🗑 Delete
               </button>
             </form>
@@ -110,9 +168,9 @@
   </div>
 </div>
 
-<!-- EDIT EMPLOYEE MODAL -->
-<div id="editModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000000aa;z-index:200;align-items:center;justify-content:center">
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:90%;max-width:400px">
+<!-- ── EDIT EMPLOYEE MODAL ── -->
+<div id="editModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000000aa;z-index:200;align-items:center;justify-content:center;padding:16px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:90%;max-width:460px;max-height:90vh;overflow-y:auto">
     <div style="font-weight:700;font-size:16px;margin-bottom:16px">✏️ Edit Employee</div>
     <form method="POST" id="editForm">
       <div class="form-group">
@@ -131,6 +189,26 @@
           {% endfor %}
         </select>
       </div>
+
+      <!-- Site assignment in edit modal -->
+      {% if all_sites %}
+      <div class="form-group">
+        <label>Assign to Site(s)</label>
+        <div class="site-checks" id="editSiteChecks">
+          {% for site in all_sites %}
+          <label class="site-check-label" id="editSiteLabel_{{ site.id }}">
+            <input type="checkbox" name="site_ids" value="{{ site.id }}"
+                   id="editSiteCb_{{ site.id }}">
+            {{ site.name }}
+          </label>
+          {% endfor %}
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
+          ⚠️ Assigning to 2+ sites marks employee as multi-site (excluded from auto sampling).
+        </div>
+      </div>
+      {% endif %}
+
       <div style="display:flex;gap:8px;margin-top:16px">
         <button type="submit" class="btn btn-primary">Save Changes</button>
         <button type="button" class="btn btn-ghost" onclick="closeEdit()">Cancel</button>
@@ -138,35 +216,64 @@
     </form>
   </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-function openEdit(id, name, empId, discipline) {
+// ── Add form toggle
+function toggleAddForm(){
+  const f = document.getElementById('addForm');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+
+// ── Search filter
+function filterTable(q){
+  q = q.toLowerCase();
+  document.querySelectorAll('.emp-row').forEach(row => {
+    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+// ── Open edit modal
+function openEdit(id, name, empId, discipline, siteIds) {
   document.getElementById('editName').value = name;
   document.getElementById('editEmpId').value = empId;
   document.getElementById('editDiscipline').value = discipline;
   document.getElementById('editForm').action = '/employees/edit/' + id;
-  const modal = document.getElementById('editModal');
-  modal.style.display = 'flex';
+
+  // Reset all site checkboxes first
+  document.querySelectorAll('#editSiteChecks input[type=checkbox]').forEach(cb => {
+    cb.checked = false;
+    cb.closest('.site-check-label').classList.remove('checked');
+  });
+
+  // Check the ones this employee is assigned to
+  if (siteIds) {
+    siteIds.forEach(siteId => {
+      const cb = document.getElementById('editSiteCb_' + siteId);
+      if (cb) {
+        cb.checked = true;
+        cb.closest('.site-check-label').classList.add('checked');
+      }
+    });
+  }
+
+  document.getElementById('editModal').style.display = 'flex';
 }
+
 function closeEdit() {
   document.getElementById('editModal').style.display = 'none';
 }
-function toggleAddForm(){
-  const f = document.getElementById('addForm');
-  f.style.display = f.style.display==='none' ? 'block' : 'none';
-}
-function filterTable(q){
-  q = q.toLowerCase();
-  document.querySelectorAll('.emp-row').forEach(row=>{
-    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
-  });
-}
-// Handle new discipline input
+
+// Close modal on backdrop click
+document.getElementById('editModal').addEventListener('click', function(e){
+  if (e.target === this) closeEdit();
+});
+
+// ── New discipline input handler
 document.querySelector('select[name=discipline]')?.addEventListener('change', function(){
   const inp = document.getElementById('newDiscInput');
-  const opt = document.getElementById('newDiscOpt');
   if(this.value === '__new__'){
     inp.style.display = 'block';
     inp.name = 'discipline';
@@ -177,6 +284,15 @@ document.querySelector('select[name=discipline]')?.addEventListener('change', fu
     inp.name = 'discipline_new';
     this.name = 'discipline';
   }
+});
+
+// ── Site checkbox styling (add form)
+document.querySelectorAll('.site-check-label input[type=checkbox]').forEach(cb => {
+  const label = cb.closest('.site-check-label');
+  if (cb.checked) label.classList.add('checked');
+  cb.addEventListener('change', () => {
+    label.classList.toggle('checked', cb.checked);
+  });
 });
 </script>
 {% endblock %}
