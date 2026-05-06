@@ -3,36 +3,35 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <div class="page-title">Weekly Schedule</div>
+    <div class="page-title">Weekly Schedule
+      {% if active_site %}
+      <span style="font-size:14px;font-weight:600;color:var(--orange);background:var(--orange-dim);border:1px solid var(--orange);padding:3px 10px;border-radius:20px;margin-left:8px;vertical-align:middle">{{ active_site.name }}</span>
+      {% endif %}
+    </div>
     <div class="page-sub">Week of {{ week_start.strftime('%d %b %Y') }}</div>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <a href="{{ url_for('download_template') }}" class="btn btn-teal">📥 Download Template</a>
-
-{% if not selection_exists and current_user.role in ['admin','spv'] %}
-<form method="POST" action="{{ url_for('upload_schedule_excel') }}"
-      enctype="multipart/form-data" style="display:inline">
-  <label class="btn btn-upload" style="cursor:pointer;text-transform:none">
-    📤 Upload Schedule
-    <input type="file" name="excel_file" accept=".xlsx,.csv"
-            style="display:none" onchange="this.form.submit()">
-  </label>
-</form>
-{% endif %}
     {% if not selection_exists and current_user.role in ['admin','spv'] %}
+    <form method="POST" action="{{ url_for('upload_schedule_excel') }}"
+          enctype="multipart/form-data" style="display:inline">
+      <label class="btn btn-upload" style="cursor:pointer;text-transform:none">
+        📤 Upload Schedule
+        <input type="file" name="excel_file" accept=".xlsx,.csv"
+               style="display:none" onchange="this.form.submit()">
+      </label>
+    </form>
     <form method="POST" action="{{ url_for('generate_selection') }}">
       <button type="submit" class="btn btn-primary"
-        onclick="return confirm('Generate random selection for all 7 days this week?')">
+        onclick="return confirm('Generate random selection for all 7 days this week for {{ active_site.name if active_site else \"this site\" }}?')">
         🎲 Generate Week Selection
       </button>
     </form>
     {% endif %}
     {% if current_user.role == 'admin' %}
     <form method="POST" action="{{ url_for('reset_week_schedule') }}"
-          onsubmit="return confirm('⚠️ WARNING: This will delete ALL selections and schedule for this week. This cannot be undone. Are you sure?')">
-      <button type="submit" class="btn" style="background:#dc3545;color:#fff;border:none">
-        🔄 Reset Week
-      </button>
+          onsubmit="return confirm('⚠️ WARNING: This will delete ALL selections and schedule for {{ active_site.name if active_site else \"this site\" }} this week. Cannot be undone. Are you sure?')">
+      <button type="submit" class="btn btn-danger">🔄 Reset Week</button>
     </form>
     {% endif %}
   </div>
@@ -40,7 +39,7 @@
 
 {% if selection_exists %}
 <div class="flash success">
-  ✅ This week's selection has been generated. Schedule is now locked.
+  ✅ This week's selection has been generated for <strong>{{ active_site.name if active_site }}</strong>. Schedule is now locked.
   Go to <a href="{{ url_for('testing') }}" style="color:inherit;font-weight:600">Testing</a> to record results.
 </div>
 {% endif %}
@@ -52,8 +51,13 @@
 
 <div class="card">
   <div class="card-title">Who Works This Week</div>
-
-  <!-- DAY HEADERS -->
+  {% if not by_discipline %}
+  <div style="text-align:center;padding:32px;color:var(--text-muted)">
+    <div style="font-size:32px;margin-bottom:8px">👥</div>
+    <div style="font-weight:600;margin-bottom:4px">No employees assigned to {{ active_site.name if active_site }}</div>
+    <div style="font-size:13px">Go to <a href="{{ url_for('employees') }}" style="color:var(--orange)">Employees</a> and assign employees to this site first.</div>
+  </div>
+  {% else %}
   <div class="table-wrap">
     <table id="schedTable">
       <thead>
@@ -72,7 +76,6 @@
       </thead>
       <tbody>
         {% for discipline, emps in by_discipline.items() %}
-        <!-- DISCIPLINE HEADER ROW -->
         <tr>
           <td colspan="9" style="background:var(--surface2);padding:8px 12px">
             <span style="font-size:12px;font-weight:700;text-transform:uppercase;
@@ -83,7 +86,12 @@
         </tr>
         {% for emp in emps %}
         <tr>
-          <td style="font-weight:600">{{ emp.name }}</td>
+          <td style="font-weight:600">
+            {{ emp.name }}
+            {% if emp.is_multisite %}
+            <span style="font-size:10px;background:rgba(124,58,237,0.15);color:#a78bfa;border:1px solid #7C3AED;padding:2px 5px;border-radius:10px;margin-left:4px">MULTI</span>
+            {% endif %}
+          </td>
           <td style="font-size:13px;color:var(--text-muted)">{{ emp.employee_id }}</td>
           {% for day in days %}
           <td style="text-align:center">
@@ -108,12 +116,15 @@
       </tbody>
     </table>
   </div>
+  {% endif %}
 </div>
 
-{% if not selection_exists and current_user.role in ['admin','spv'] %}
+{% if not selection_exists and current_user.role in ['admin','spv'] and by_discipline %}
 <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
   <button type="submit" class="btn btn-success">💾 Save Schedule</button>
 </div>
+</form>
+{% elif not selection_exists and current_user.role in ['admin','spv'] %}
 </form>
 {% endif %}
 
@@ -134,8 +145,6 @@
       <tbody>
         {% for i in range(7) %}
         {% set day_date = day_dates[i] %}
-        {% set day_selections = [] %}
-        {% for sel in selections_today %}{% endfor %}
         <tr {% if day_date == today %}style="background:var(--accent-dim)"{% endif %}>
           <td style="font-weight:600">
             {{ day_labels[i] }}
@@ -167,14 +176,12 @@
 {% endblock %}
 {% block scripts %}
 <script>
-// Select All / Clear All per row helper
 function toggleRow(empId, val) {
   ['mon','tue','wed','thu','fri','sat','sun'].forEach(d => {
     const cb = document.querySelector(`input[name="${empId}_${d}"]`);
     if(cb) cb.checked = val;
   });
 }
-// Select All / Clear All per column
 function toggleDay(day, val) {
   document.querySelectorAll(`input[name$="_${day}"]`).forEach(cb => cb.checked = val);
 }

@@ -3,14 +3,18 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <div class="page-title">Test History</div>
-    <div class="page-sub">All recorded test results</div>
+    <div class="page-title">Test History
+      {% if active_site %}
+      <span style="font-size:14px;font-weight:600;color:var(--orange);background:var(--orange-dim);border:1px solid var(--orange);padding:3px 10px;border-radius:20px;margin-left:8px;vertical-align:middle">{{ active_site.name }}</span>
+      {% endif %}
+    </div>
+    <div class="page-sub">All recorded test results{% if active_site %} for {{ active_site.name }}{% endif %}</div>
   </div>
 </div>
 
 <!-- FILTERS -->
 <div class="card">
-  <div class="card-title">Filter</div>
+  <div class="card-title">🔍 Filter</div>
   <form method="GET" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
     <div class="form-group" style="margin:0">
       <label>Date</label>
@@ -42,8 +46,9 @@
 
 <!-- EXPORT EXCEL -->
 <div class="card" style="border-color:var(--pass)">
-  <div class="card-title">Export Results</div>
-  <form method="GET" action="{{ url_for('export_results') }}" style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:flex-end">
+  <div class="card-title">📥 Export Results</div>
+  <form method="GET" action="{{ url_for('export_results') }}"
+        style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:flex-end">
     <div class="form-group" style="margin:0">
       <label>Date From</label>
       <input type="date" name="date_from">
@@ -54,6 +59,11 @@
     </div>
     <button type="submit" class="btn btn-success">📥 Download Excel</button>
   </form>
+  {% if active_site %}
+  <div style="font-size:12px;color:var(--text-muted);margin-top:8px">
+    Export will include results for <strong style="color:var(--orange)">{{ active_site.name }}</strong> only.
+  </div>
+  {% endif %}
 </div>
 
 <!-- RESULTS -->
@@ -75,10 +85,14 @@
       <tbody>
         {% for r in results.items %}
         <tr>
-          <td style="font-family:var(--mono);font-size:13px;white-space:nowrap">{{ r.test_date.strftime('%d %b %Y') }}</td>
+          <td style="font-family:var(--mono);font-size:13px;white-space:nowrap">
+            {{ r.test_date.strftime('%d %b %Y') }}
+          </td>
           <td>
             <div style="font-weight:600">{{ r.employee.name }}</div>
-            <div style="font-size:12px;color:var(--text-muted);font-family:var(--mono)">{{ r.employee.employee_id }}</div>
+            <div style="font-size:12px;color:var(--text-muted);font-family:var(--mono)">
+              {{ r.employee.employee_id }}
+            </div>
           </td>
           <td style="font-size:13px;color:var(--text-muted)">{{ r.employee.discipline }}</td>
           <td>
@@ -88,12 +102,15 @@
               <span class="badge-fail">FAIL</span>
             {% endif %}
             {% if r.remark %}
-            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ r.remark }}">{{ r.remark }}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;max-width:150px;
+                        overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                 title="{{ r.remark }}">{{ r.remark }}</div>
             {% endif %}
           </td>
           <td>
             {% if r.evidence_path %}
-            <a href="{{ url_for('static', filename='uploads/' + r.evidence_path) }}" target="_blank" class="btn btn-ghost btn-sm">📷 View</a>
+            <a href="{{ url_for('static', filename='uploads/' + r.evidence_path) }}"
+               target="_blank" class="btn btn-ghost btn-sm">📷 View</a>
             {% else %}
             <span style="color:var(--text-muted);font-size:13px">—</span>
             {% endif %}
@@ -127,7 +144,7 @@
   {% else %}
   <div style="text-align:center;padding:32px;color:var(--text-muted)">
     <div style="font-size:32px;margin-bottom:8px">📭</div>
-    <div>No test results found.</div>
+    <div>No test results found{% if active_site %} for {{ active_site.name }}{% endif %}.</div>
   </div>
   {% endif %}
 </div>

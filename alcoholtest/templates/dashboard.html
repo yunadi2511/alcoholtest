@@ -6,10 +6,27 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <div class="page-title">Dashboard</div>
+    <div class="page-title">Dashboard
+      {% if active_site %}
+      <span style="font-size:14px;font-weight:600;color:var(--orange);background:var(--orange-dim);border:1px solid var(--orange);padding:3px 10px;border-radius:20px;margin-left:8px;vertical-align:middle">{{ active_site.name }}</span>
+      {% endif %}
+    </div>
     <div class="page-sub">{{ today.strftime('%A, %d %B %Y') }}</div>
   </div>
 </div>
+
+{% if no_site %}
+<div class="card" style="text-align:center;padding:40px;color:var(--text-muted)">
+  <div style="font-size:40px;margin-bottom:12px">🏭</div>
+  <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px">No site assigned</div>
+  <div style="font-size:14px">Ask your Admin to create a site and assign you to it.</div>
+  {% if current_user.role == 'admin' %}
+  <div style="margin-top:16px">
+    <a href="{{ url_for('sites') }}" class="btn btn-primary">🏭 Manage Sites</a>
+  </div>
+  {% endif %}
+</div>
+{% else %}
 
 <!-- TODAY STATS -->
 <div class="stat-grid">
@@ -35,10 +52,6 @@
     <a href="{{ url_for('schedule') }}" class="btn btn-ghost" style="min-width:160px;justify-content:center">📋 Weekly Schedule</a>
     <a href="{{ url_for('testing') }}" class="btn btn-primary" style="min-width:160px;justify-content:center">🧪 Go to Testing</a>
   </div>
-  {% if current_user.role == 'admin' %}
-  <div style="font-size:12px;color:var(--text-muted);margin-top:10px">
-  </div>
-  {% endif %}
 </div>
 {% endif %}
 
@@ -113,31 +126,35 @@
   <canvas id="weekChart" height="160"></canvas>
 </div>
 
+{% endif %}
 {% endblock %}
+
 {% block scripts %}
 <script>
 const raw = {{ week_data|safe }};
 const labels = raw.map(d=>d.date);
 const passes = raw.map(d=>d.pass);
 const fails = raw.map(d=>d.fail);
-const ctx = document.getElementById('weekChart').getContext('2d');
-new Chart(ctx,{
-  type:'bar',
-  data:{
-    labels,
-    datasets:[
-      {label:'Pass',data:passes,backgroundColor:'#2ea04388',borderColor:'#2ea043',borderWidth:1,borderRadius:4},
-      {label:'Fail',data:fails,backgroundColor:'#da363388',borderColor:'#da3633',borderWidth:1,borderRadius:4}
-    ]
-  },
-  options:{
-    responsive:true,
-    plugins:{legend:{labels:{color:'#7d8590',font:{size:12}}}},
-    scales:{
-      x:{ticks:{color:'#7d8590'},grid:{color:'#30363d'}},
-      y:{ticks:{color:'#7d8590',stepSize:1},grid:{color:'#30363d'},beginAtZero:true}
+const ctx = document.getElementById('weekChart')?.getContext('2d');
+if(ctx){
+  new Chart(ctx,{
+    type:'bar',
+    data:{
+      labels,
+      datasets:[
+        {label:'Pass',data:passes,backgroundColor:'#2ea04388',borderColor:'#2ea043',borderWidth:1,borderRadius:4},
+        {label:'Fail',data:fails,backgroundColor:'#da363388',borderColor:'#da3633',borderWidth:1,borderRadius:4}
+      ]
+    },
+    options:{
+      responsive:true,
+      plugins:{legend:{labels:{color:'#7d8590',font:{size:12}}}},
+      scales:{
+        x:{ticks:{color:'#7d8590'},grid:{color:'#30363d'}},
+        y:{ticks:{color:'#7d8590',stepSize:1},grid:{color:'#30363d'},beginAtZero:true}
+      }
     }
-  }
-});
+  });
+}
 </script>
 {% endblock %}

@@ -3,7 +3,11 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <div class="page-title">Alcohol Testing</div>
+    <div class="page-title">Alcohol Testing
+      {% if active_site %}
+      <span style="font-size:14px;font-weight:600;color:var(--orange);background:var(--orange-dim);border:1px solid var(--orange);padding:3px 10px;border-radius:20px;margin-left:8px;vertical-align:middle">{{ active_site.name }}</span>
+      {% endif %}
+    </div>
     <div class="page-sub">{{ today.strftime('%A, %d %B %Y') }}</div>
   </div>
 </div>
@@ -12,7 +16,12 @@
 <div class="card" style="text-align:center;padding:36px;color:var(--text-muted)">
   <div style="font-size:36px;margin-bottom:10px">🎲</div>
   <div style="font-weight:600;margin-bottom:6px;font-size:16px">No selection yet for today</div>
-  <div style="font-size:13px">Mark attendance first, then generate the selection.</div>
+  <div style="font-size:13px">
+    {% if active_site %}
+    No selection generated for <strong style="color:var(--orange)">{{ active_site.name }}</strong> today.
+    {% endif %}
+    Set up the weekly schedule first, then generate the selection.
+  </div>
   <div style="margin-top:16px">
     <a href="{{ url_for('schedule') }}" class="btn btn-ghost">📋 Go to Schedule</a>
   </div>
@@ -49,7 +58,9 @@
               margin-left:6px;font-weight:400">SWAPPED</span>
         {% endif %}
       </div>
-      <div style="font-size:12px;color:var(--text-muted);font-family:var(--mono)">{{ emp.employee_id }} · {{ emp.discipline }}</div>
+      <div style="font-size:12px;color:var(--text-muted);font-family:var(--mono)">
+        {{ emp.employee_id }} · {{ emp.discipline }}
+      </div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       {% if result %}
@@ -76,7 +87,9 @@
 <div class="card" style="text-align:center;padding:28px;border-color:var(--pass)">
   <div style="font-size:32px;margin-bottom:8px">🎉</div>
   <div style="font-weight:700;font-size:18px;color:#56d364">All tests completed for today!</div>
-  <div style="margin-top:12px"><a href="{{ url_for('dashboard') }}" class="btn btn-success">View Dashboard</a></div>
+  <div style="margin-top:12px">
+    <a href="{{ url_for('dashboard') }}" class="btn btn-success">View Dashboard</a>
+  </div>
 </div>
 {% endif %}
 
