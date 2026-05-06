@@ -144,32 +144,30 @@
               <span style="background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);padding:3px 10px;border-radius:20px;font-size:12px">Inactive</span>
             {% endif %}
           </td>
-          <td>
-            <div style="display:flex;gap:4px;align-items:center">
-              <button type="button" class="btn btn-primary btn-sm"
-                style="width:64px;height:30px;padding:0;justify-content:center;font-size:12px"
-                onclick="openEdit(
-                  {{ emp.id }},
-                  {{ emp.name | tojson }},
-                  {{ emp.employee_id | tojson }},
-                  {{ emp.discipline | tojson }},
-                  {{ emp.sites | map(attribute='id') | list | tojson }}
-                )">✏️ Edit</button>
-              <form method="POST" action="{{ url_for('toggle_employee', emp_id=emp.id) }}" style="display:inline">
-                <button type="submit" class="btn btn-purple btn-sm"
-                  style="width:50px;height:30px;padding:0;justify-content:center;font-size:12px"
-                  onclick="return confirm('{{ 'Deactivate' if emp.is_active else 'Activate' }} {{ emp.name }}?')">
-                  {{ '🚫 Off' if emp.is_active else '✅ On' }}
-                </button>
-              </form>
-              <form method="POST" action="{{ url_for('delete_employee', emp_id=emp.id) }}" style="display:inline">
-                <button type="submit" class="btn btn-danger btn-sm"
-                  style="width:50px;height:30px;padding:0;justify-content:center;font-size:12px"
-                  onclick="return confirm('⚠️ Delete {{ emp.name }}? Removes ALL test history. Use Deactivate to preserve records. Sure?')">
-                  🗑 Del
-                </button>
-              </form>
-            </div>
+          <td style="white-space:nowrap">
+            <button type="button" class="btn btn-primary btn-sm"
+              style="width:58px;height:30px;padding:0;justify-content:center;font-size:12px;margin-right:3px"
+              onclick="openEdit(
+                {{ emp.id }},
+                {{ emp.name | tojson }},
+                {{ emp.employee_id | tojson }},
+                {{ emp.discipline | tojson }},
+                {{ emp.sites | map(attribute='id') | list | tojson }}
+              )">✏️ Edit</button>
+            <form method="POST" action="{{ url_for('toggle_employee', emp_id=emp.id) }}" style="display:inline">
+              <button type="submit" class="btn btn-purple btn-sm"
+                style="width:58px;height:30px;padding:0;justify-content:center;font-size:12px;margin-right:3px"
+                onclick="return confirm('{{ 'Deactivate' if emp.is_active else 'Activate' }} {{ emp.name }}?')">
+                {{ '🚫 Off' if emp.is_active else '✅ On' }}
+              </button>
+            </form>
+            <form method="POST" action="{{ url_for('delete_employee', emp_id=emp.id) }}" style="display:inline">
+              <button type="submit" class="btn btn-danger btn-sm"
+                style="width:58px;height:30px;padding:0;justify-content:center;font-size:12px"
+                onclick="return confirm('⚠️ Delete {{ emp.name }}? Removes ALL test history. Sure?')">
+                🗑 Del
+              </button>
+            </form>
           </td>
         </tr>
         {% endfor %}
