@@ -47,6 +47,18 @@ class User(UserMixin, db.Model):
         return check_password_hash(self.password_hash, password)
 
 
+# Many-to-many: Employee <-> Site
+employee_sites = db.Table('employee_sites',
+    db.Column('employee_id', db.Integer, db.ForeignKey('employee.id'), primary_key=True),
+    db.Column('site_id', db.Integer, db.ForeignKey('site.id'), primary_key=True)
+)
+
+class Site(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)  # e.g. JKT1, JKT2
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class Employee(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
@@ -54,6 +66,7 @@ class Employee(db.Model):
     discipline = db.Column(db.String(80), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    sites = db.relationship('Site', secondary=employee_sites, backref='employees')
 
     def last_tested_date(self):
         result = TestResult.query.filter_by(employee_id=self.id)\
@@ -84,6 +97,8 @@ class WeeklySchedule(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     employee = db.relationship('Employee', backref='schedules')
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=True)
+    site = db.relationship('Site', backref='weekly_schedules')
 
 
 class SwapLog(db.Model):
@@ -107,6 +122,8 @@ class DailySelection(db.Model):
     is_swapped = db.Column(db.Boolean, default=False)  # ← ADD THIS
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     employee = db.relationship('Employee', backref='selections')
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=True)
+    site = db.relationship('Site', backref='daily_selections')
 
 
 class TestResult(db.Model):
@@ -120,6 +137,7 @@ class TestResult(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     employee = db.relationship('Employee', backref='test_results')
     tester = db.relationship('User', backref='conducted_tests')
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=True)
 
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
