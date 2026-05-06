@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -20,8 +20,32 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 app.config['SITE_NAME'] = os.environ.get('SITE_NAME', 'AlcoCheck')
 
 @app.context_processor
-def inject_site_name():
-    return dict(site_name=app.config['SITE_NAME'])
+def inject_globals():
+    """Inject site_name, active_site, and user's sites into all templates."""
+    active_site = None
+    user_sites = []
+
+    if current_user.is_authenticated:
+        # Admin sees all sites; others see only their assigned sites
+        if current_user.role == 'admin':
+            user_sites = Site.query.order_by(Site.name).all()
+        else:
+            user_sites = current_user.sites
+
+        # Get active site from session
+        active_site_id = session.get('active_site_id')
+        if active_site_id:
+            active_site = Site.query.get(active_site_id)
+        # If no active site in session, default to first available
+        if not active_site and user_sites:
+            active_site = user_sites[0]
+            session['active_site_id'] = active_site.id
+
+    return dict(
+        site_name=app.config['SITE_NAME'],
+        active_site=active_site,
+        user_sites=user_sites
+    )
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 DATA_RETENTION_DAYS = 60
@@ -30,7 +54,28 @@ db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+
 # ─── MODELS ───────────────────────────────────────────────────────────────────
+
+# Many-to-many: User <-> Site
+user_sites = db.Table('user_sites',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id'), primary_key=True),
+    db.Column('site_id', db.Integer, db.ForeignKey('site.id'), primary_key=True)
+)
+
+# Many-to-many: Employee <-> Site
+employee_sites = db.Table('employee_sites',
+    db.Column('employee_id', db.Integer, db.ForeignKey('employee.id'), primary_key=True),
+    db.Column('site_id', db.Integer, db.ForeignKey('site.id'), primary_key=True)
+)
+
+
+class Site(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)  # e.g. JKT1, JKT2
+    description = db.Column(db.String(200))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -39,6 +84,7 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), nullable=False)  # admin / spv / viewer
     full_name = db.Column(db.String(120))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    sites = db.relationship('Site', secondary=user_sites, backref='users')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -46,17 +92,11 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-
-# Many-to-many: Employee <-> Site
-employee_sites = db.Table('employee_sites',
-    db.Column('employee_id', db.Integer, db.ForeignKey('employee.id'), primary_key=True),
-    db.Column('site_id', db.Integer, db.ForeignKey('site.id'), primary_key=True)
-)
-
-class Site(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)  # e.g. JKT1, JKT2
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    def can_access_site(self, site_id):
+        """Check if user can access a given site."""
+        if self.role == 'admin':
+            return True
+        return any(s.id == site_id for s in self.sites)
 
 
 class Employee(db.Model):
@@ -65,6 +105,7 @@ class Employee(db.Model):
     employee_id = db.Column(db.String(50), unique=True, nullable=False)
     discipline = db.Column(db.String(80), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
+    is_multisite = db.Column(db.Boolean, default=False)  # Excluded from auto random sampling
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     sites = db.relationship('Site', secondary=employee_sites, backref='employees')
 
@@ -73,20 +114,23 @@ class Employee(db.Model):
             .order_by(TestResult.test_date.desc()).first()
         return result.test_date if result else None
 
-    def tested_this_week(self):
+    def tested_this_week(self, site_id=None):
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
-        count = TestResult.query.filter(
+        query = TestResult.query.filter(
             TestResult.employee_id == self.id,
             TestResult.test_date >= week_start
-        ).count()
-        return count > 0
+        )
+        if site_id:
+            query = query.filter(TestResult.site_id == site_id)
+        return query.count() > 0
 
 
 class WeeklySchedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     week_start = db.Column(db.Date, nullable=False)  # Always a Monday
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False)
     mon = db.Column(db.Boolean, default=False)
     tue = db.Column(db.Boolean, default=False)
     wed = db.Column(db.Boolean, default=False)
@@ -97,7 +141,6 @@ class WeeklySchedule(db.Model):
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     employee = db.relationship('Employee', backref='schedules')
-    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=True)
     site = db.relationship('Site', backref='weekly_schedules')
 
 
@@ -118,11 +161,11 @@ class DailySelection(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     selection_date = db.Column(db.Date, nullable=False)
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False)
     generated_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    is_swapped = db.Column(db.Boolean, default=False)  # ← ADD THIS
+    is_swapped = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     employee = db.relationship('Employee', backref='selections')
-    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=True)
     site = db.relationship('Site', backref='daily_selections')
 
 
@@ -130,6 +173,7 @@ class TestResult(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.Integer, db.ForeignKey('employee.id'), nullable=False)
     test_date = db.Column(db.Date, nullable=False)
+    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=False)
     result = db.Column(db.String(10), nullable=False)  # PASS / FAIL
     remark = db.Column(db.Text)
     evidence_path = db.Column(db.String(300))
@@ -137,7 +181,7 @@ class TestResult(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     employee = db.relationship('Employee', backref='test_results')
     tester = db.relationship('User', backref='conducted_tests')
-    site_id = db.Column(db.Integer, db.ForeignKey('site.id'), nullable=True)
+    site = db.relationship('Site', backref='test_results')
 
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -151,40 +195,48 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def get_disciplines():
+def get_disciplines(site_id=None):
+    if site_id:
+        emps = Employee.query.filter(
+            Employee.is_active == True,
+            Employee.sites.any(Site.id == site_id)
+        ).all()
+        return list(set(e.discipline for e in emps))
     disciplines = db.session.query(Employee.discipline).distinct().all()
     return [d[0] for d in disciplines]
 
 
+def get_active_site():
+    """Get the currently active site from session."""
+    site_id = session.get('active_site_id')
+    if site_id:
+        return Site.query.get(site_id)
+    return None
+
+
 def cleanup_old_data():
     cutoff_date = date.today() - timedelta(days=DATA_RETENTION_DAYS)
-    
-    # Find old test results
     old_results = TestResult.query.filter(TestResult.test_date < cutoff_date).all()
-    
-    # Delete their photos first
     for result in old_results:
         if result.evidence_path:
             photo_path = os.path.join(app.config['UPLOAD_FOLDER'], result.evidence_path)
             if os.path.exists(photo_path):
                 os.remove(photo_path)
-    
-    # Delete old records
     TestResult.query.filter(TestResult.test_date < cutoff_date).delete()
     DailySelection.query.filter(DailySelection.selection_date < cutoff_date).delete()
     WeeklySchedule.query.filter(WeeklySchedule.week_start < cutoff_date).delete()
-    
     db.session.commit()
     print(f"Cleanup done: deleted data older than {cutoff_date}")
 
 
-def get_todays_employees():
+def get_todays_employees(site_id):
+    """Get employees scheduled to work today at a given site."""
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
     day_map = {0:'mon', 1:'tue', 2:'wed', 3:'thu', 4:'fri', 5:'sat', 6:'sun'}
     today_col = day_map[today.weekday()]
 
-    schedules = WeeklySchedule.query.filter_by(week_start=week_start).all()
+    schedules = WeeklySchedule.query.filter_by(week_start=week_start, site_id=site_id).all()
     present = []
     for s in schedules:
         if getattr(s, today_col):
@@ -194,40 +246,40 @@ def get_todays_employees():
     return present
 
 
-def generate_weekly_selection(week_start, generated_by_id):
+def generate_weekly_selection(week_start, generated_by_id, site_id):
+    """Generate weekly random selections for a specific site."""
     day_map = {0:'mon', 1:'tue', 2:'wed', 3:'thu', 4:'fri', 5:'sat', 6:'sun'}
-    schedules = WeeklySchedule.query.filter_by(week_start=week_start).all()
+    schedules = WeeklySchedule.query.filter_by(week_start=week_start, site_id=site_id).all()
 
-    # Delete any existing selections for this week
+    # Delete any existing selections for this week + site
     for i in range(7):
         day = week_start + timedelta(days=i)
-        DailySelection.query.filter_by(selection_date=day).delete()
+        DailySelection.query.filter_by(selection_date=day, site_id=site_id).delete()
     db.session.commit()
 
-    # Generate for each day of the week
     for i in range(7):
         day = week_start + timedelta(days=i)
         day_col = day_map[i]
 
-        # Get employees working this day
+        # Get employees working this day at this site (exclude multi-site employees from auto pool)
         present = []
         for s in schedules:
             if getattr(s, day_col):
                 emp = Employee.query.get(s.employee_id)
-                if emp and emp.is_active:
+                if emp and emp.is_active and not emp.is_multisite:
                     present.append(emp)
 
         if not present:
             continue
 
         disciplines = list(set(e.discipline for e in present))
-        not_tested = [e for e in present if not e.tested_this_week()]
-        tested = [e for e in present if e.tested_this_week()]
+        not_tested = [e for e in present if not e.tested_this_week(site_id)]
+        tested = [e for e in present if e.tested_this_week(site_id)]
 
         selected = []
         selected_ids = set()
 
-        # Ensure 1 per discipline
+        # Ensure at least 1 per discipline
         for disc in disciplines:
             disc_emps = [e for e in not_tested if e.discipline == disc]
             if not disc_emps:
@@ -238,7 +290,7 @@ def generate_weekly_selection(week_start, generated_by_id):
                     selected.append(pick)
                     selected_ids.add(pick.id)
 
-        # Fill to 15
+        # Fill to 15 from not-yet-tested pool
         pool = [e for e in not_tested if e.id not in selected_ids]
         random.shuffle(pool)
         for e in pool:
@@ -247,6 +299,7 @@ def generate_weekly_selection(week_start, generated_by_id):
             selected.append(e)
             selected_ids.add(e.id)
 
+        # If still under 15, fill from already-tested pool
         if len(selected) < 15:
             pool2 = [e for e in tested if e.id not in selected_ids]
             random.shuffle(pool2)
@@ -261,6 +314,7 @@ def generate_weekly_selection(week_start, generated_by_id):
             sel = DailySelection(
                 employee_id=emp.id,
                 selection_date=day,
+                site_id=site_id,
                 generated_by=generated_by_id,
                 is_swapped=False
             )
@@ -288,6 +342,13 @@ def login():
         user = User.query.filter_by(username=username).first()
         if user and user.check_password(password):
             login_user(user, remember=True)
+            # Set default active site in session
+            if user.role == 'admin':
+                first_site = Site.query.order_by(Site.name).first()
+            else:
+                first_site = user.sites[0] if user.sites else None
+            if first_site:
+                session['active_site_id'] = first_site.id
             return redirect(url_for('dashboard'))
         flash('Invalid username or password.', 'error')
     return render_template('login.html')
@@ -296,8 +357,23 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
+    session.pop('active_site_id', None)
     logout_user()
     return redirect(url_for('login'))
+
+
+@app.route('/switch-site/<int:site_id>')
+@login_required
+def switch_site(site_id):
+    """Switch the active site for the current session."""
+    if not current_user.can_access_site(site_id):
+        flash('You do not have access to that site.', 'error')
+        return redirect(url_for('dashboard'))
+    site = Site.query.get_or_404(site_id)
+    session['active_site_id'] = site.id
+    flash(f'Switched to site: {site.name}', 'success')
+    # Redirect back to the page they came from
+    return redirect(request.referrer or url_for('dashboard'))
 
 
 # ─── ROUTES: DASHBOARD ────────────────────────────────────────────────────────
@@ -305,31 +381,43 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site available. Please ask Admin to create a site and assign you to it.', 'error')
+        return render_template('dashboard.html',
+            today=date.today(), no_site=True,
+            selections_today=[], results_today=[],
+            tested_ids=[], pass_count=0, fail_count=0,
+            pending_count=0, week_data=json.dumps([]), disc_summary={}
+        )
+
     today = date.today()
-    # Today's selections
-    selections_today = DailySelection.query.filter_by(selection_date=today).all()
+    selections_today = DailySelection.query.filter_by(
+        selection_date=today, site_id=active_site.id
+    ).all()
     selected_ids = [s.employee_id for s in selections_today]
 
-    # Today's results
-    results_today = TestResult.query.filter_by(test_date=today).all()
+    results_today = TestResult.query.filter_by(
+        test_date=today, site_id=active_site.id
+    ).all()
     tested_ids = [r.employee_id for r in results_today]
 
     pass_count = sum(1 for r in results_today if r.result == 'PASS')
     fail_count = sum(1 for r in results_today if r.result == 'FAIL')
     pending_count = len(selected_ids) - len(tested_ids)
 
-    # Last 7 days summary
+    # Last 7 days summary for this site
     week_data = []
     for i in range(6, -1, -1):
         d = today - timedelta(days=i)
-        day_results = TestResult.query.filter_by(test_date=d).all()
+        day_results = TestResult.query.filter_by(test_date=d, site_id=active_site.id).all()
         week_data.append({
             'date': d.strftime('%d %b'),
             'pass': sum(1 for r in day_results if r.result == 'PASS'),
             'fail': sum(1 for r in day_results if r.result == 'FAIL'),
         })
 
-    # Discipline summary today
+    # Discipline summary today for this site
     disc_summary = {}
     for r in results_today:
         disc = r.employee.discipline
@@ -342,6 +430,8 @@ def dashboard():
 
     return render_template('dashboard.html',
         today=today,
+        no_site=False,
+        active_site=active_site,
         selections_today=selections_today,
         results_today=results_today,
         tested_ids=tested_ids,
@@ -361,19 +451,32 @@ def schedule():
     if current_user.role == 'viewer':
         flash('Access denied.', 'error')
         return redirect(url_for('dashboard'))
+
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site selected.', 'error')
+        return redirect(url_for('dashboard'))
+
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
-    schedules = WeeklySchedule.query.filter_by(week_start=week_start).all()
-    employees = Employee.query.filter_by(is_active=True).order_by(Employee.discipline, Employee.name).all()
+
+    # Only employees assigned to this site
+    employees = Employee.query.filter(
+        Employee.is_active == True,
+        Employee.sites.any(Site.id == active_site.id)
+    ).order_by(Employee.discipline, Employee.name).all()
+
+    schedules = WeeklySchedule.query.filter_by(
+        week_start=week_start, site_id=active_site.id
+    ).all()
+
     selection_exists = DailySelection.query.filter(
         DailySelection.selection_date >= week_start,
-        DailySelection.selection_date <= week_start + timedelta(days=6)
+        DailySelection.selection_date <= week_start + timedelta(days=6),
+        DailySelection.site_id == active_site.id
     ).first()
 
-    # Build schedule dict for easy lookup in template
-    schedule_dict = {}
-    for s in schedules:
-        schedule_dict[s.employee_id] = s
+    schedule_dict = {s.employee_id: s for s in schedules}
 
     by_discipline = {}
     for emp in employees:
@@ -387,6 +490,7 @@ def schedule():
 
     return render_template('schedule.html',
         week_start=week_start,
+        active_site=active_site,
         by_discipline=by_discipline,
         schedule_dict=schedule_dict,
         selection_exists=selection_exists,
@@ -404,31 +508,39 @@ def upload_schedule():
         flash('Access denied.', 'error')
         return redirect(url_for('schedule'))
 
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site selected.', 'error')
+        return redirect(url_for('schedule'))
+
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
 
-    # Check if selection already generated this week
     selection_exists = DailySelection.query.filter(
         DailySelection.selection_date >= week_start,
-        DailySelection.selection_date <= week_start + timedelta(days=6)
+        DailySelection.selection_date <= week_start + timedelta(days=6),
+        DailySelection.site_id == active_site.id
     ).first()
 
     if selection_exists:
         flash('Selection already generated this week. Cannot change schedule.', 'error')
         return redirect(url_for('schedule'))
 
-    # Delete existing schedule for this week
-    WeeklySchedule.query.filter_by(week_start=week_start).delete()
+    WeeklySchedule.query.filter_by(week_start=week_start, site_id=active_site.id).delete()
 
-    employees = Employee.query.filter_by(is_active=True).all()
+    employees = Employee.query.filter(
+        Employee.is_active == True,
+        Employee.sites.any(Site.id == active_site.id)
+    ).all()
+
     days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
-
     for emp in employees:
         working_days = {d: (request.form.get(f'{emp.id}_{d}') == 'on') for d in days}
         if any(working_days.values()):
             sched = WeeklySchedule(
                 employee_id=emp.id,
                 week_start=week_start,
+                site_id=active_site.id,
                 created_by=current_user.id,
                 **working_days
             )
@@ -446,12 +558,18 @@ def upload_schedule_excel():
         flash('Access denied.', 'error')
         return redirect(url_for('schedule'))
 
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site selected.', 'error')
+        return redirect(url_for('schedule'))
+
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
 
     selection_exists = DailySelection.query.filter(
         DailySelection.selection_date >= week_start,
-        DailySelection.selection_date <= week_start + timedelta(days=6)
+        DailySelection.selection_date <= week_start + timedelta(days=6),
+        DailySelection.site_id == active_site.id
     ).first()
     if selection_exists:
         flash('Selection already generated this week. Cannot change schedule.', 'error')
@@ -475,7 +593,7 @@ def upload_schedule_excel():
         ws = wb.active
         days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
 
-        WeeklySchedule.query.filter_by(week_start=week_start).delete()
+        WeeklySchedule.query.filter_by(week_start=week_start, site_id=active_site.id).delete()
 
         count = 0
         for row in ws.iter_rows(min_row=3, values_only=True):
@@ -492,6 +610,10 @@ def upload_schedule_excel():
             if not emp:
                 continue
 
+            # Only process if employee is assigned to this site
+            if not any(s.id == active_site.id for s in emp.sites):
+                continue
+
             working_days = {}
             for i, day in enumerate(days):
                 val = row[3 + i]
@@ -501,6 +623,7 @@ def upload_schedule_excel():
                 sched = WeeklySchedule(
                     employee_id=emp.id,
                     week_start=week_start,
+                    site_id=active_site.id,
                     created_by=current_user.id,
                     **working_days
                 )
@@ -508,13 +631,12 @@ def upload_schedule_excel():
                 count += 1
 
         db.session.commit()
-        flash(f'Schedule uploaded! {count} employees scheduled.', 'success')
+        flash(f'Schedule uploaded! {count} employees scheduled for {active_site.name}.', 'success')
 
     except Exception as e:
         flash(f'Error reading Excel file: {str(e)}', 'error')
 
     return redirect(url_for('schedule'))
-
 
 
 @app.route('/schedule/reset-week', methods=['POST'])
@@ -523,22 +645,39 @@ def reset_week_schedule():
     if current_user.role != 'admin':
         flash('Access denied. Admin only.', 'error')
         return redirect(url_for('schedule'))
+
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site selected.', 'error')
+        return redirect(url_for('schedule'))
+
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
+
     DailySelection.query.filter(
         DailySelection.selection_date >= week_start,
-        DailySelection.selection_date <= week_start + timedelta(days=6)
+        DailySelection.selection_date <= week_start + timedelta(days=6),
+        DailySelection.site_id == active_site.id
     ).delete()
-    WeeklySchedule.query.filter_by(week_start=week_start).delete()
+    WeeklySchedule.query.filter_by(week_start=week_start, site_id=active_site.id).delete()
     db.session.commit()
-    flash('Week schedule and selections have been reset successfully.', 'success')
+    flash(f'Week schedule and selections for {active_site.name} have been reset.', 'success')
     return redirect(url_for('schedule'))
 
 
 @app.route('/schedule/download-template')
 @login_required
 def download_template():
-    employees = Employee.query.filter_by(is_active=True).order_by(Employee.discipline, Employee.name).all()
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site selected.', 'error')
+        return redirect(url_for('schedule'))
+
+    employees = Employee.query.filter(
+        Employee.is_active == True,
+        Employee.sites.any(Site.id == active_site.id)
+    ).order_by(Employee.discipline, Employee.name).all()
+
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
 
@@ -546,21 +685,17 @@ def download_template():
     ws = wb.active
     ws.title = "Weekly Schedule"
 
-    # Headers
     ws.append(['Employee Name', 'Employee ID', 'Discipline', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
     ws['A1'].font = openpyxl.styles.Font(bold=True)
 
-    # Add week dates in row 2
     days_row = ['', '', 'Week of:']
     for i in range(7):
         days_row.append((week_start + timedelta(days=i)).strftime('%d %b'))
     ws.append(days_row)
 
-    # Employee rows
     for emp in employees:
         ws.append([emp.name, emp.employee_id, emp.discipline, '', '', '', '', '', '', ''])
 
-    # Style columns
     ws.column_dimensions['A'].width = 25
     ws.column_dimensions['B'].width = 12
     ws.column_dimensions['C'].width = 15
@@ -569,7 +704,7 @@ def download_template():
     wb.save(output)
     output.seek(0)
 
-    filename = f"schedule_template_{week_start}.xlsx"
+    filename = f"schedule_template_{active_site.name}_{week_start}.xlsx"
     return send_file(output, download_name=filename, as_attachment=True,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
@@ -582,40 +717,59 @@ def generate_selection():
     if current_user.role == 'viewer':
         return jsonify({'error': 'Access denied'}), 403
 
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site selected.', 'error')
+        return redirect(url_for('schedule'))
+
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
 
-    schedule_exists = WeeklySchedule.query.filter_by(week_start=week_start).first()
+    schedule_exists = WeeklySchedule.query.filter_by(
+        week_start=week_start, site_id=active_site.id
+    ).first()
     if not schedule_exists:
         flash('Please upload the weekly schedule first.', 'error')
         return redirect(url_for('schedule'))
 
     existing = DailySelection.query.filter(
         DailySelection.selection_date >= week_start,
-        DailySelection.selection_date <= week_start + timedelta(days=6)
+        DailySelection.selection_date <= week_start + timedelta(days=6),
+        DailySelection.site_id == active_site.id
     ).first()
 
     if existing:
         flash('Selection already generated for this week.', 'error')
         return redirect(url_for('schedule'))
 
-    generate_weekly_selection(week_start, current_user.id)
-    flash('Weekly selection generated successfully for all 7 days!', 'success')
+    generate_weekly_selection(week_start, current_user.id, active_site.id)
+    flash(f'Weekly selection generated successfully for {active_site.name}!', 'success')
     return redirect(url_for('schedule'))
+
 
 # ─── ROUTES: TESTING ──────────────────────────────────────────────────────────
 
 @app.route('/testing')
 @login_required
 def testing():
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site selected.', 'error')
+        return redirect(url_for('dashboard'))
+
     today = date.today()
-    selections = DailySelection.query.filter_by(selection_date=today).all()
-    results_today = TestResult.query.filter_by(test_date=today).all()
+    selections = DailySelection.query.filter_by(
+        selection_date=today, site_id=active_site.id
+    ).all()
+    results_today = TestResult.query.filter_by(
+        test_date=today, site_id=active_site.id
+    ).all()
     tested_ids = {r.employee_id: r for r in results_today}
     selection_exists = bool(selections)
 
     return render_template('testing.html',
         today=today,
+        active_site=active_site,
         selections=selections,
         tested_ids=tested_ids,
         selection_exists=selection_exists
@@ -629,9 +783,16 @@ def submit_test(employee_id):
         flash('Access denied.', 'error')
         return redirect(url_for('testing'))
 
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site selected.', 'error')
+        return redirect(url_for('testing'))
+
     employee = Employee.query.get_or_404(employee_id)
     today = date.today()
-    existing = TestResult.query.filter_by(employee_id=employee_id, test_date=today).first()
+    existing = TestResult.query.filter_by(
+        employee_id=employee_id, test_date=today, site_id=active_site.id
+    ).first()
     if existing:
         flash('Test already submitted for this employee today.', 'error')
         return redirect(url_for('testing'))
@@ -653,6 +814,7 @@ def submit_test(employee_id):
         test = TestResult(
             employee_id=employee_id,
             test_date=today,
+            site_id=active_site.id,
             result=result,
             remark=remark,
             evidence_path=evidence_path,
@@ -663,7 +825,9 @@ def submit_test(employee_id):
         flash(f'Test result submitted for {employee.name}.', 'success')
         return redirect(url_for('testing'))
 
-    return render_template('submit_test.html', employee=employee, today=today)
+    return render_template('submit_test.html',
+        employee=employee, today=today, active_site=active_site
+    )
 
 
 @app.route('/swap-employee/<int:selection_id>', methods=['GET', 'POST'])
@@ -673,12 +837,18 @@ def swap_employee(selection_id):
         flash('Access denied.', 'error')
         return redirect(url_for('testing'))
 
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site selected.', 'error')
+        return redirect(url_for('testing'))
+
     selection = DailySelection.query.get_or_404(selection_id)
     today = date.today()
 
-    # Get available replacements — same discipline, working today, not already selected
-    today_employees = get_todays_employees()
-    already_selected = [s.employee_id for s in DailySelection.query.filter_by(selection_date=today).all()]
+    today_employees = get_todays_employees(active_site.id)
+    already_selected = [s.employee_id for s in DailySelection.query.filter_by(
+        selection_date=today, site_id=active_site.id
+    ).all()]
     available = [e for e in today_employees
                  if e.discipline == selection.employee.discipline
                  and e.id not in already_selected
@@ -692,7 +862,6 @@ def swap_employee(selection_id):
             flash('Please select a replacement and provide a reason.', 'error')
             return render_template('swap.html', selection=selection, available=available, today=today)
 
-        # Log the swap
         swap = SwapLog(
             original_employee_id=selection.employee_id,
             replacement_employee_id=int(replacement_id),
@@ -701,8 +870,6 @@ def swap_employee(selection_id):
             swapped_by=current_user.id
         )
         db.session.add(swap)
-
-        # Update the selection
         selection.employee_id = int(replacement_id)
         selection.is_swapped = True
         db.session.commit()
@@ -742,12 +909,19 @@ def edit_test(result_id):
 @app.route('/history')
 @login_required
 def history():
+    active_site = get_active_site()
+    if not active_site:
+        flash('No site selected.', 'error')
+        return redirect(url_for('dashboard'))
+
     page = request.args.get('page', 1, type=int)
     date_filter = request.args.get('date', '')
     result_filter = request.args.get('result', '')
     disc_filter = request.args.get('discipline', '')
 
-    query = TestResult.query.join(Employee)
+    query = TestResult.query.join(Employee).filter(
+        TestResult.site_id == active_site.id
+    )
 
     if date_filter:
         try:
@@ -760,11 +934,15 @@ def history():
     if disc_filter:
         query = query.filter(Employee.discipline == disc_filter)
 
-    results = query.order_by(TestResult.test_date.desc(), TestResult.created_at.desc()).paginate(page=page, per_page=20)
-    disciplines = get_disciplines()
+    results = query.order_by(
+        TestResult.test_date.desc(), TestResult.created_at.desc()
+    ).paginate(page=page, per_page=20)
+
+    disciplines = get_disciplines(active_site.id)
 
     return render_template('history.html',
         results=results,
+        active_site=active_site,
         disciplines=disciplines,
         date_filter=date_filter,
         result_filter=result_filter,
@@ -775,10 +953,13 @@ def history():
 @app.route('/export-results')
 @login_required
 def export_results():
+    active_site = get_active_site()
     date_from = request.args.get('date_from', '')
     date_to = request.args.get('date_to', '')
 
     query = TestResult.query.join(Employee)
+    if active_site:
+        query = query.filter(TestResult.site_id == active_site.id)
 
     if date_from:
         try:
@@ -793,19 +974,17 @@ def export_results():
 
     results = query.order_by(TestResult.test_date.desc()).all()
 
-    # Create Excel file
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Test Results"
 
-    # Header row
-    headers = ['Date', 'Employee Name', 'Employee ID', 'Discipline', 'Result', 'Remark', 'Tested By']
+    headers = ['Date', 'Site', 'Employee Name', 'Employee ID', 'Discipline', 'Result', 'Remark', 'Tested By']
     ws.append(headers)
 
-    # Data rows
     for r in results:
         ws.append([
             r.test_date.strftime('%d/%m/%Y'),
+            r.site.name if r.site else '',
             r.employee.name,
             r.employee.employee_id,
             r.employee.discipline,
@@ -814,12 +993,12 @@ def export_results():
             r.tester.full_name if r.tester else ''
         ])
 
-    # Save to memory
     output = BytesIO()
     wb.save(output)
     output.seek(0)
 
-    filename = f"alcocheck_results_{date_from}_to_{date_to}.xlsx"
+    site_label = active_site.name if active_site else 'all'
+    filename = f"alcocheck_results_{site_label}_{date_from}_to_{date_to}.xlsx"
     return send_file(output, download_name=filename, as_attachment=True,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
@@ -835,17 +1014,80 @@ def run_cleanup():
     return redirect(url_for('dashboard'))
 
 
+# ─── ROUTES: SITES (ADMIN) ────────────────────────────────────────────────────
+
+@app.route('/sites')
+@login_required
+def sites():
+    if current_user.role != 'admin':
+        flash('Access denied. Admin only.', 'error')
+        return redirect(url_for('dashboard'))
+    all_sites = Site.query.order_by(Site.name).all()
+    return render_template('sites.html', sites=all_sites)
+
+
+@app.route('/sites/add', methods=['POST'])
+@login_required
+def add_site():
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Access denied'}), 403
+
+    name = request.form.get('name', '').strip().upper()
+    description = request.form.get('description', '').strip()
+
+    if not name:
+        flash('Site name is required.', 'error')
+        return redirect(url_for('sites'))
+
+    if Site.query.filter_by(name=name).first():
+        flash(f'Site {name} already exists.', 'error')
+        return redirect(url_for('sites'))
+
+    site = Site(name=name, description=description)
+    db.session.add(site)
+    db.session.commit()
+    flash(f'Site {name} created successfully.', 'success')
+    return redirect(url_for('sites'))
+
+
+@app.route('/sites/delete/<int:site_id>', methods=['POST'])
+@login_required
+def delete_site(site_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Access denied'}), 403
+
+    site = Site.query.get_or_404(site_id)
+
+    # Check if site has any data
+    has_data = (
+        WeeklySchedule.query.filter_by(site_id=site_id).first() or
+        DailySelection.query.filter_by(site_id=site_id).first() or
+        TestResult.query.filter_by(site_id=site_id).first()
+    )
+    if has_data:
+        flash(f'Cannot delete {site.name} — it has existing schedule or test data.', 'error')
+        return redirect(url_for('sites'))
+
+    db.session.delete(site)
+    db.session.commit()
+    flash(f'Site {site.name} deleted.', 'success')
+    return redirect(url_for('sites'))
+
+
 # ─── ROUTES: EMPLOYEES (ADMIN) ────────────────────────────────────────────────
 
 @app.route('/employees')
 @login_required
 def employees():
-    if current_user.role not in ['admin']:
+    if current_user.role != 'admin':
         flash('Access denied. Admin only.', 'error')
         return redirect(url_for('dashboard'))
     emps = Employee.query.order_by(Employee.discipline, Employee.name).all()
     disciplines = get_disciplines()
-    return render_template('employees.html', employees=emps, disciplines=disciplines)
+    all_sites = Site.query.order_by(Site.name).all()
+    return render_template('employees.html',
+        employees=emps, disciplines=disciplines, all_sites=all_sites
+    )
 
 
 @app.route('/employees/add', methods=['POST'])
@@ -853,23 +1095,51 @@ def employees():
 def add_employee():
     if current_user.role != 'admin':
         return jsonify({'error': 'Access denied'}), 403
+
     name = request.form.get('name', '').strip()
     emp_id = request.form.get('employee_id', '').strip()
     discipline = request.form.get('discipline', '').strip()
+    site_ids = request.form.getlist('site_ids')  # Multiple site checkboxes
 
     if not name or not emp_id or not discipline:
-        flash('All fields are required.', 'error')
+        flash('Name, Employee ID, and Discipline are required.', 'error')
         return redirect(url_for('employees'))
 
-    existing = Employee.query.filter_by(employee_id=emp_id).first()
-    if existing:
+    if Employee.query.filter_by(employee_id=emp_id).first():
         flash(f'Employee ID {emp_id} already exists.', 'error')
         return redirect(url_for('employees'))
 
     emp = Employee(name=name, employee_id=emp_id, discipline=discipline)
+
+    # Assign sites
+    selected_sites = Site.query.filter(Site.id.in_(site_ids)).all()
+    emp.sites = selected_sites
+    emp.is_multisite = len(selected_sites) > 1
+
     db.session.add(emp)
     db.session.commit()
     flash(f'{name} added successfully.', 'success')
+    return redirect(url_for('employees'))
+
+
+@app.route('/employees/edit/<int:emp_id>', methods=['POST'])
+@login_required
+def edit_employee(emp_id):
+    if current_user.role != 'admin':
+        return jsonify({'error': 'Access denied'}), 403
+
+    emp = Employee.query.get_or_404(emp_id)
+    emp.name = request.form.get('name', emp.name).strip()
+    emp.employee_id = request.form.get('employee_id', emp.employee_id).strip()
+    emp.discipline = request.form.get('discipline', emp.discipline).strip()
+
+    site_ids = request.form.getlist('site_ids')
+    selected_sites = Site.query.filter(Site.id.in_(site_ids)).all()
+    emp.sites = selected_sites
+    emp.is_multisite = len(selected_sites) > 1
+
+    db.session.commit()
+    flash(f'{emp.name} has been updated successfully.', 'success')
     return redirect(url_for('employees'))
 
 
@@ -920,7 +1190,6 @@ def download_employee_template():
     ws.column_dimensions['B'].width = 15
     ws.column_dimensions['C'].width = 20
 
-    # Example rows so user knows the format
     ws.append(['Ahmad Yusuf', 'EMP001', 'Mechanical'])
     ws.append(['Budi Santoso', 'EMP002', 'Electrical'])
     ws.append(['Dewi Rahayu', 'EMP003', 'Operator'])
@@ -954,6 +1223,10 @@ def import_employees():
         flash('Please upload .xlsx or .csv file only.', 'error')
         return redirect(url_for('employees'))
 
+    # Get site to assign imported employees to (optional)
+    import_site_id = request.form.get('import_site_id')
+    import_site = Site.query.get(import_site_id) if import_site_id else None
+
     try:
         added = 0
         skipped = 0
@@ -986,6 +1259,8 @@ def import_employees():
                 discipline=discipline or 'General',
                 is_active=True
             )
+            if import_site:
+                emp.sites = [import_site]
             db.session.add(emp)
             added += 1
 
@@ -998,20 +1273,6 @@ def import_employees():
     return redirect(url_for('employees'))
 
 
-@app.route('/employees/edit/<int:emp_id>', methods=['POST'])
-@login_required
-def edit_employee(emp_id):
-    if current_user.role != 'admin':
-        return jsonify({'error': 'Access denied'}), 403
-    emp = Employee.query.get_or_404(emp_id)
-    emp.name = request.form.get('name', emp.name).strip()
-    emp.employee_id = request.form.get('employee_id', emp.employee_id).strip()
-    emp.discipline = request.form.get('discipline', emp.discipline).strip()
-    db.session.commit()
-    flash(f'{emp.name} has been updated successfully.', 'success')
-    return redirect(url_for('employees'))
-
-
 # ─── ROUTES: USER MANAGEMENT (ADMIN) ─────────────────────────────────────────
 
 @app.route('/users')
@@ -1021,7 +1282,8 @@ def users():
         flash('Access denied.', 'error')
         return redirect(url_for('dashboard'))
     all_users = User.query.order_by(User.role, User.username).all()
-    return render_template('users.html', users=all_users)
+    all_sites = Site.query.order_by(Site.name).all()
+    return render_template('users.html', users=all_users, all_sites=all_sites)
 
 
 @app.route('/users/add', methods=['POST'])
@@ -1029,13 +1291,15 @@ def users():
 def add_user():
     if current_user.role != 'admin':
         return jsonify({'error': 'Access denied'}), 403
+
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '')
     role = request.form.get('role', '')
     full_name = request.form.get('full_name', '').strip()
+    site_ids = request.form.getlist('site_ids')
 
     if not username or not password or not role:
-        flash('All fields are required.', 'error')
+        flash('Username, password, and role are required.', 'error')
         return redirect(url_for('users'))
 
     if User.query.filter_by(username=username).first():
@@ -1044,6 +1308,13 @@ def add_user():
 
     u = User(username=username, role=role, full_name=full_name)
     u.set_password(password)
+
+    # Admin automatically gets all sites; others get selected sites
+    if role == 'admin':
+        u.sites = Site.query.all()
+    else:
+        u.sites = Site.query.filter(Site.id.in_(site_ids)).all()
+
     db.session.add(u)
     db.session.commit()
     flash(f'User {username} created successfully.', 'success')
@@ -1055,12 +1326,21 @@ def add_user():
 def edit_user(user_id):
     if current_user.role != 'admin':
         return redirect(url_for('dashboard'))
+
     user = User.query.get_or_404(user_id)
     user.full_name = request.form.get('full_name', user.full_name)
     user.role = request.form.get('role', user.role)
+
     new_password = request.form.get('password', '').strip()
     if new_password:
-        user.password = generate_password_hash(new_password)
+        user.set_password(new_password)
+
+    site_ids = request.form.getlist('site_ids')
+    if user.role == 'admin':
+        user.sites = Site.query.all()
+    else:
+        user.sites = Site.query.filter(Site.id.in_(site_ids)).all()
+
     db.session.commit()
     flash('User updated successfully.', 'success')
     return redirect(url_for('users'))
@@ -1086,13 +1366,14 @@ def delete_user(user_id):
 def init_db():
     with app.app_context():
         db.create_all()
+
         # Create default admin if not exists
         if not User.query.filter_by(username='admin').first():
             admin = User(username='admin', role='admin', full_name='Administrator')
             admin.set_password('Admin@1234')
             db.session.add(admin)
-
-        # No placeholder employees - admin adds real employees via the UI
+            db.session.commit()
+            print("Default admin created. Username: admin / Password: Admin@1234")
 
         db.session.commit()
         print("Database initialized.")
