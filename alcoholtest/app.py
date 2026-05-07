@@ -10,6 +10,7 @@ import json
 from io import BytesIO
 import openpyxl
 from apscheduler.schedulers.background import BackgroundScheduler
+from PIL import Image
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'jkt2-altest-Edge2020!'
@@ -193,6 +194,34 @@ def load_user(user_id):
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def compress_image(file, filename, save_path):
+    """Compress and save uploaded image. Returns saved filename."""
+    try:
+        img = Image.open(file)
+        # Convert RGBA to RGB if needed (e.g. PNG with transparency)
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
+        # Resize if too large — max 1200px wide
+        max_width = 1200
+        if img.width > max_width:
+            ratio = max_width / img.width
+            new_height = int(img.height * ratio)
+            img = img.resize((max_width, new_height), Image.LANCZOS)
+        # Always save as JPEG for consistency and smaller size
+        filename = filename.rsplit('.', 1)[0] + '.jpg'
+        save_path = save_path.rsplit('.', 1)[0] + '.jpg'
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        img.save(save_path, 'JPEG', quality=75, optimize=True)
+        return filename
+    except Exception as e:
+        print(f"Image compression error: {e}")
+        # Fallback — save original if compression fails
+        file.seek(0)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        file.save(save_path)
+        return filename
 
 
 def get_disciplines(site_id=None):
@@ -807,9 +836,7 @@ def submit_test(employee_id):
             if file and file.filename and allowed_file(file.filename):
                 filename = secure_filename(f"{today}_{employee_id}_{file.filename}")
                 save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                file.save(save_path)
-                evidence_path = filename
+                evidence_path = compress_image(file, filename, save_path)
 
         test = TestResult(
             employee_id=employee_id,
@@ -895,9 +922,7 @@ def edit_test(result_id):
             if file and file.filename and allowed_file(file.filename):
                 filename = secure_filename(f"{result.test_date}_{result.employee_id}_{file.filename}")
                 save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                file.save(save_path)
-                result.evidence_path = filename
+                result.evidence_path = compress_image(file, filename, save_path)
         db.session.commit()
         flash('Test result updated successfully.', 'success')
         return redirect(url_for('history'))
