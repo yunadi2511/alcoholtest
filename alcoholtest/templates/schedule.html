@@ -28,12 +28,6 @@
       </button>
     </form>
     {% endif %}
-    {% if current_user.role == 'admin' %}
-    <form method="POST" action="{{ url_for('reset_week_schedule') }}"
-          onsubmit="return confirm('WARNING: This will delete ALL selections and schedule for this site this week. Cannot be undone. Are you sure?')">
-      <button type="submit" class="btn btn-danger">🔄 Reset Week</button>
-    </form>
-    {% endif %}
   </div>
 </div>
 
@@ -120,12 +114,35 @@
 </div>
 
 {% if not selection_exists and current_user.role in ['admin','spv'] and by_discipline %}
-<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <button type="submit" class="btn btn-success">💾 Save Schedule</button>
+  {% if current_user.role == 'admin' %}
+  <form method="POST" action="{{ url_for('reset_week_schedule') }}"
+        onsubmit="return confirm('WARNING: This will delete ALL selections and schedule for this site this week. Cannot be undone. Are you sure?')">
+    <button type="submit" class="btn btn-danger" style="min-width:auto">🔄 Reset Week</button>
+  </form>
+  {% endif %}
 </div>
 </form>
 {% elif not selection_exists and current_user.role in ['admin','spv'] %}
 </form>
+{% if current_user.role == 'admin' %}
+<div style="display:flex;justify-content:flex-end;margin-bottom:20px">
+  <form method="POST" action="{{ url_for('reset_week_schedule') }}"
+        onsubmit="return confirm('WARNING: This will delete ALL selections and schedule for this site this week. Cannot be undone. Are you sure?')">
+    <button type="submit" class="btn btn-danger" style="min-width:auto">🔄 Reset Week</button>
+  </form>
+</div>
+{% endif %}
+{% endif %}
+
+{% if selection_exists and current_user.role == 'admin' %}
+<div style="display:flex;justify-content:flex-end;margin-bottom:20px">
+  <form method="POST" action="{{ url_for('reset_week_schedule') }}"
+        onsubmit="return confirm('WARNING: This will delete ALL selections and schedule for this site this week. Cannot be undone. Are you sure?')">
+    <button type="submit" class="btn btn-danger" style="min-width:auto">🔄 Reset Week</button>
+  </form>
+</div>
 {% endif %}
 
 <!-- THIS WEEK'S SELECTION SUMMARY -->
