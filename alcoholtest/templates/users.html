@@ -35,8 +35,6 @@
           <option value="viewer">Viewer</option>
         </select>
       </div>
-
-      <!-- Site Assignment -->
       <div class="form-group" style="margin:0;grid-column:span 2" id="addSiteSection">
         <label>Assign to Site(s)</label>
         {% if all_sites %}
@@ -58,7 +56,6 @@
         {% endif %}
       </div>
     </div>
-
     <div style="margin-top:14px;display:flex;gap:8px">
       <button type="submit" class="btn btn-success">Create User</button>
       <button type="button" class="btn btn-ghost" onclick="toggleAddForm()">Cancel</button>
@@ -128,19 +125,19 @@
           <td>
             {% if u.id != current_user.id %}
             <div style="display:flex;gap:6px;align-items:center">
+              <!-- Fix: use data attributes to avoid special char issues -->
               <button class="btn btn-blue btn-sm"
-                onclick="openEdit(
-                  {{ u.id }},
-                  {{ u.full_name | tojson }},
-                  {{ u.username | tojson }},
-                  {{ u.role | tojson }},
-                  {{ u.sites | map(attribute='id') | list | tojson }}
-                )">
+                data-id="{{ u.id }}"
+                data-fullname="{{ u.full_name | e }}"
+                data-username="{{ u.username | e }}"
+                data-role="{{ u.role }}"
+                data-sites="{{ u.sites | map(attribute='id') | list | tojson | e }}"
+                onclick="openEditFromBtn(this)">
                 ✏️ Edit
               </button>
               <form method="POST" action="{{ url_for('delete_user', user_id=u.id) }}" style="display:inline">
                 <button type="submit" class="btn btn-danger btn-sm"
-                  onclick="return confirm('Delete user {{ u.username }}? This cannot be undone.')">
+                  onclick="return confirm('Delete this user? This cannot be undone.')">
                   Delete
                 </button>
               </form>
@@ -182,8 +179,6 @@
         <label>New Password <span style="font-weight:400;text-transform:none">(leave blank to keep current)</span></label>
         <input type="password" name="password" placeholder="Leave blank = no change">
       </div>
-
-      <!-- Site assignment in edit modal -->
       <div class="form-group" id="editSiteSection">
         <label>Assign to Site(s)</label>
         {% if all_sites %}
@@ -203,7 +198,6 @@
         <div style="font-size:13px;color:var(--text-muted)">No sites available.</div>
         {% endif %}
       </div>
-
       <div style="display:flex;gap:8px;margin-top:16px">
         <button type="submit" class="btn btn-primary">Save Changes</button>
         <button type="button" class="btn btn-ghost" onclick="closeEdit()">Cancel</button>
@@ -237,20 +231,16 @@
 
 {% block scripts %}
 <script>
-// ── Add form toggle
 function toggleAddForm(){
   const f = document.getElementById('addForm');
   f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
 
-// ── Show/hide site section based on role
-// Admin role note is shown but checkboxes are greyed out
 function toggleSiteSection(sectionId, role) {
   const section = document.getElementById(sectionId);
   if (!section) return;
   const checkboxes = section.querySelectorAll('input[type=checkbox]');
   if (role === 'admin') {
-    // Admin gets all sites automatically — dim the checkboxes
     checkboxes.forEach(cb => cb.disabled = true);
     section.style.opacity = '0.5';
   } else {
@@ -259,8 +249,14 @@ function toggleSiteSection(sectionId, role) {
   }
 }
 
-// ── Open edit modal
-function openEdit(id, fullName, username, role, siteIds) {
+// Fix: read data from button attributes instead of inline JS params
+function openEditFromBtn(btn) {
+  const id = btn.getAttribute('data-id');
+  const fullName = btn.getAttribute('data-fullname');
+  const username = btn.getAttribute('data-username');
+  const role = btn.getAttribute('data-role');
+  const sitesRaw = btn.getAttribute('data-sites');
+
   document.getElementById('editForm').action = '/users/edit/' + id;
   document.getElementById('edit_full_name').value = fullName;
   document.getElementById('edit_username').value = username;
@@ -273,7 +269,8 @@ function openEdit(id, fullName, username, role, siteIds) {
   });
 
   // Tick assigned sites
-  if (siteIds) {
+  try {
+    const siteIds = JSON.parse(sitesRaw);
     siteIds.forEach(siteId => {
       const cb = document.getElementById('editUserSiteCb_' + siteId);
       if (cb) {
@@ -281,7 +278,7 @@ function openEdit(id, fullName, username, role, siteIds) {
         cb.closest('.site-check-label').classList.add('checked');
       }
     });
-  }
+  } catch(e) {}
 
   // Apply role-based dimming
   toggleSiteSection('editSiteSection', role);
@@ -293,12 +290,10 @@ function closeEdit() {
   document.getElementById('editModal').style.display = 'none';
 }
 
-// Close modal on backdrop click
 document.getElementById('editModal').addEventListener('click', function(e){
   if (e.target === this) closeEdit();
 });
 
-// ── Site checkbox styling
 document.querySelectorAll('.site-check-label input[type=checkbox]').forEach(cb => {
   const label = cb.closest('.site-check-label');
   if (cb.checked) label.classList.add('checked');

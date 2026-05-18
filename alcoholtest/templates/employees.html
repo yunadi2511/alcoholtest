@@ -47,7 +47,7 @@
         <label>Employee ID</label>
         <input type="text" name="employee_id" placeholder="e.g. A001" required>
       </div>
-      <div class="form-group" style="margin:0;grid-column:span 2">
+      <div class="form-group" style="margin:0">
         <label>Discipline</label>
         <select name="discipline" required>
           <option value="">Select discipline...</option>
@@ -57,6 +57,13 @@
           <option value="__new__" id="newDiscOpt">+ Add new discipline...</option>
         </select>
         <input type="text" name="discipline_new" id="newDiscInput" placeholder="Enter new discipline name" style="margin-top:8px;display:none">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Employee Type</label>
+        <select name="employee_type" required>
+          <option value="shifting">Shifting — tested once per week</option>
+          <option value="non_shifting">Non-Shifting — tested once per month</option>
+        </select>
       </div>
       {% if all_sites %}
       <div class="form-group" style="margin:0;grid-column:span 2">
@@ -91,12 +98,13 @@
   <div class="card-title">👥 All Employees</div>
   <input type="text" placeholder="Search by name, ID, or discipline..." oninput="filterTable(this.value)" style="margin-bottom:14px">
   <div class="table-wrap">
-    <table id="empTable" style="width:100%;min-width:700px">
+    <table id="empTable" style="width:100%;min-width:750px">
       <thead>
         <tr>
           <th>Name</th>
           <th>ID</th>
           <th>Discipline</th>
+          <th>Type</th>
           <th>Sites</th>
           <th>Last Tested</th>
           <th>Status</th>
@@ -112,8 +120,15 @@
             <span style="background:rgba(124,58,237,0.15);color:#a78bfa;border:1px solid #7C3AED;padding:1px 5px;border-radius:20px;font-size:9px;font-weight:700;margin-left:3px;vertical-align:middle;white-space:nowrap">MULTI</span>
             {% endif %}
           </td>
-          <td style="font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ emp.employee_id }}</td>
-          <td style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ emp.discipline }}</td>
+          <td style="font-family:var(--mono);font-size:12px;white-space:nowrap">{{ emp.employee_id }}</td>
+          <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">{{ emp.discipline }}</td>
+          <td>
+            {% if emp.employee_type == 'shifting' %}
+            <span style="background:rgba(58,126,255,0.15);color:var(--smart-blue);border:1px solid var(--smart-blue);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">Shifting</span>
+            {% else %}
+            <span style="background:rgba(0,200,83,0.12);color:#4ade80;border:1px solid var(--pass);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">Non-Shift</span>
+            {% endif %}
+          </td>
           <td>
             {% if emp.sites %}
               {% for site in emp.sites %}
@@ -136,20 +151,27 @@
           </td>
           <td>
             <div style="display:flex;gap:4px;align-items:center;flex-wrap:nowrap">
+              <!-- Edit button uses data attributes to avoid JS special char issues -->
               <button type="button"
                 style="width:58px;height:30px;background:var(--orange);color:#fff;border:none;border-radius:var(--radius);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0"
-                onclick="openEdit({{ emp.id }},{{ emp.name|tojson }},{{ emp.employee_id|tojson }},{{ emp.discipline|tojson }},{{ emp.sites|map(attribute='id')|list|tojson }})">✏️ Edit</button>
+                data-id="{{ emp.id }}"
+                data-name="{{ emp.name | e }}"
+                data-empid="{{ emp.employee_id | e }}"
+                data-discipline="{{ emp.discipline | e }}"
+                data-type="{{ emp.employee_type }}"
+                data-sites="{{ emp.sites | map(attribute='id') | list | tojson | e }}"
+                onclick="openEditFromBtn(this)">✏️ Edit</button>
               <form method="POST" action="{{ url_for('toggle_employee', emp_id=emp.id) }}" style="display:inline">
                 <button type="submit"
                   style="width:44px;height:30px;background:#7C3AED;color:#fff;border:none;border-radius:var(--radius);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0"
-                  onclick="return confirm('{{ 'Deactivate' if emp.is_active else 'Activate' }} {{ emp.name }}?')">
+                  onclick="return confirm('Are you sure?')">
                   {{ '🚫 Off' if emp.is_active else '✅ On' }}
                 </button>
               </form>
               <form method="POST" action="{{ url_for('delete_employee', emp_id=emp.id) }}" style="display:inline">
                 <button type="submit"
                   style="width:44px;height:30px;background:var(--fail);color:#fff;border:none;border-radius:var(--radius);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0"
-                  onclick="return confirm('Delete {{ emp.name }}? This removes ALL test history. Sure?')">
+                  onclick="return confirm('Delete this employee? This removes ALL test history. Sure?')">
                   🗑 Del
                 </button>
               </form>
@@ -164,7 +186,7 @@
 
 <!-- ── EDIT MODAL ── -->
 <div id="editModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#000000aa;z-index:200;align-items:center;justify-content:center;padding:16px">
-  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:90%;max-width:460px;max-height:90vh;overflow-y:auto">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;width:90%;max-width:480px;max-height:90vh;overflow-y:auto">
     <div style="font-weight:700;font-size:16px;margin-bottom:16px">✏️ Edit Employee</div>
     <form method="POST" id="editForm">
       <div class="form-group">
@@ -181,6 +203,13 @@
           {% for d in disciplines %}
           <option value="{{ d }}">{{ d }}</option>
           {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Employee Type</label>
+        <select name="employee_type" id="editType" required>
+          <option value="shifting">Shifting — tested once per week</option>
+          <option value="non_shifting">Non-Shifting — tested once per month</option>
         </select>
       </div>
       {% if all_sites %}
@@ -215,35 +244,61 @@ function toggleAddForm(){
   const f = document.getElementById('addForm');
   f.style.display = f.style.display === 'none' ? 'block' : 'none';
 }
+
 function filterTable(q){
   q = q.toLowerCase();
   document.querySelectorAll('.emp-row').forEach(row => {
     row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
   });
 }
-function openEdit(id, name, empId, discipline, siteIds) {
+
+// Fix: read data from button attributes instead of inline JS params
+// This avoids issues with special characters in names
+function openEditFromBtn(btn) {
+  const id = btn.getAttribute('data-id');
+  const name = btn.getAttribute('data-name');
+  const empId = btn.getAttribute('data-empid');
+  const discipline = btn.getAttribute('data-discipline');
+  const type = btn.getAttribute('data-type');
+  const sitesRaw = btn.getAttribute('data-sites');
+
   document.getElementById('editName').value = name;
   document.getElementById('editEmpId').value = empId;
   document.getElementById('editDiscipline').value = discipline;
+  document.getElementById('editType').value = type;
   document.getElementById('editForm').action = '/employees/edit/' + id;
+
+  // Reset site checkboxes
   document.querySelectorAll('#editSiteChecks input[type=checkbox]').forEach(cb => {
     cb.checked = false;
     cb.closest('.site-check-label').classList.remove('checked');
   });
-  if (siteIds) {
+
+  // Tick assigned sites
+  try {
+    const siteIds = JSON.parse(sitesRaw);
     siteIds.forEach(siteId => {
       const cb = document.getElementById('editSiteCb_' + siteId);
-      if (cb) { cb.checked = true; cb.closest('.site-check-label').classList.add('checked'); }
+      if (cb) {
+        cb.checked = true;
+        cb.closest('.site-check-label').classList.add('checked');
+      }
     });
-  }
+  } catch(e) {}
+
   document.getElementById('editModal').style.display = 'flex';
 }
+
 function closeEdit() {
   document.getElementById('editModal').style.display = 'none';
 }
+
+// Close modal on backdrop click
 document.getElementById('editModal').addEventListener('click', function(e){
   if (e.target === this) closeEdit();
 });
+
+// New discipline handler
 document.querySelector('select[name=discipline]')?.addEventListener('change', function(){
   const inp = document.getElementById('newDiscInput');
   if(this.value === '__new__'){
@@ -252,6 +307,8 @@ document.querySelector('select[name=discipline]')?.addEventListener('change', fu
     inp.style.display = 'none'; inp.name = 'discipline_new'; this.name = 'discipline';
   }
 });
+
+// Site checkbox styling
 document.querySelectorAll('.site-check-label input[type=checkbox]').forEach(cb => {
   const label = cb.closest('.site-check-label');
   if (cb.checked) label.classList.add('checked');

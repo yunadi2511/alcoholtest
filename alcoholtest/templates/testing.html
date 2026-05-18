@@ -10,9 +10,42 @@
     </div>
     <div class="page-sub">{{ today.strftime('%A, %d %B %Y') }}</div>
   </div>
+  <!-- Manual Add button — SPV/Admin only -->
+  {% if current_user.role in ['admin','spv'] %}
+  <button class="btn btn-blue" onclick="toggleManualAdd()">+ Add Employee</button>
+  {% endif %}
 </div>
 
-{% if not selection_exists %}
+<!-- ── MANUAL ADD FORM ── -->
+{% if current_user.role in ['admin','spv'] %}
+<div class="card" id="manualAddForm" style="display:none;border-color:var(--smart-blue)">
+  <div class="card-title">➕ Manually Add Employee to Today's Test</div>
+  <form method="POST" action="{{ url_for('add_manual_selection') }}">
+    <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end">
+      <div class="form-group" style="margin:0">
+        <label>Select Employee</label>
+        <select name="employee_id" required>
+          <option value="">— Select employee —</option>
+          {% for emp in all_employees %}
+          <option value="{{ emp.id }}"
+            {% if emp.id in already_selected_ids %}disabled style="color:var(--text-muted)"{% endif %}>
+            {{ emp.name }} ({{ emp.employee_id }}) · {{ emp.discipline }}
+            {% if emp.id in already_selected_ids %} — already in list{% endif %}
+            {% if emp.employee_type == 'non_shifting' %} [Non-Shift]{% endif %}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary" style="min-width:120px">Add to List</button>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-top:8px">
+      💡 You can add any active employee regardless of shift type or schedule.
+    </div>
+  </form>
+</div>
+{% endif %}
+
+{% if not selection_exists and not all_employees %}
 <div class="card" style="text-align:center;padding:36px;color:var(--text-muted)">
   <div style="font-size:36px;margin-bottom:10px">🎲</div>
   <div style="font-weight:600;margin-bottom:6px;font-size:16px">No selection yet for today</div>
@@ -26,9 +59,28 @@
     <a href="{{ url_for('schedule') }}" class="btn btn-ghost">📋 Go to Schedule</a>
   </div>
 </div>
+
+{% elif not selection_exists %}
+<div class="card" style="text-align:center;padding:36px;color:var(--text-muted)">
+  <div style="font-size:36px;margin-bottom:10px">🎲</div>
+  <div style="font-weight:600;margin-bottom:6px;font-size:16px">No selection yet for today</div>
+  <div style="font-size:13px">
+    {% if active_site %}
+    No selection generated for <strong style="color:var(--orange)">{{ active_site.name }}</strong> today.
+    {% endif %}
+    Set up the weekly schedule first, then generate the selection.
+    {% if current_user.role in ['admin','spv'] %}
+    Or use <strong>+ Add Employee</strong> above to manually add employees.
+    {% endif %}
+  </div>
+  <div style="margin-top:16px">
+    <a href="{{ url_for('schedule') }}" class="btn btn-ghost">📋 Go to Schedule</a>
+  </div>
+</div>
+
 {% else %}
 
-<!-- PROGRESS BAR -->
+<!-- ── PROGRESS BAR ── -->
 {% set total = selections|length %}
 {% set done = tested_ids|length %}
 {% set pct = ((done / total) * 100)|int if total > 0 else 0 %}
@@ -42,7 +94,7 @@
   </div>
 </div>
 
-<!-- TEST LIST -->
+<!-- ── TEST LIST ── -->
 <div class="card">
   <div class="card-title">Selected Employees ({{ total }})</div>
   {% for sel in selections %}
@@ -57,9 +109,17 @@
               border:1px solid var(--accent);padding:2px 6px;border-radius:10px;
               margin-left:6px;font-weight:400">SWAPPED</span>
         {% endif %}
+        {% if sel.is_manual %}
+        <span style="font-size:11px;background:rgba(58,126,255,0.15);color:var(--smart-blue);
+              border:1px solid var(--smart-blue);padding:2px 6px;border-radius:10px;
+              margin-left:6px;font-weight:400">MANUAL</span>
+        {% endif %}
       </div>
       <div style="font-size:12px;color:var(--text-muted);font-family:var(--mono)">
         {{ emp.employee_id }} · {{ emp.discipline }}
+        <span style="margin-left:6px;color:{% if emp.employee_type == 'shifting' %}var(--smart-blue){% else %}var(--pass){% endif %}">
+          · {{ 'Shifting' if emp.employee_type == 'shifting' else 'Non-Shift' }}
+        </span>
       </div>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -94,4 +154,13 @@
 {% endif %}
 
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleManualAdd(){
+  const f = document.getElementById('manualAddForm');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+}
+</script>
 {% endblock %}
